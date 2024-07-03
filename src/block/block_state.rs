@@ -1,0 +1,26 @@
+use std::collections::HashMap;
+
+#[derive(serde::Deserialize, Clone, Debug, Default)]
+pub struct BlockState(HashMap<String, Value>);
+ 
+impl BlockState {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn get(&self, state_name: &str) -> Option<&Value> {
+        self.0.get(state_name)
+    }
+}
+
+
+#[derive(serde::Deserialize, Debug, Clone, PartialEq)]
+pub enum Value {
+    Number(serde_json::Number),
+    // I32(i32),
+    // U32(u32),
+    // F32(f32),
+    String(String),
+    Struct(HashMap<String, Value>),
+    // Bytes(Box<[u8]>),
+}

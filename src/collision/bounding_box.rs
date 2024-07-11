@@ -3,12 +3,12 @@ use cgmath::Vector3;
 use crate::relative_vector::RelVec3;
 
 #[derive(serde::Deserialize, Debug, Clone, Copy)]
-pub struct LocalHitbox {
+pub struct LocalBoundingBox {
     pub start: Vector3<f32>,
-    pub end: Vector3<f32>
+    pub end: Vector3<f32>,
 }
 
-impl Default for LocalHitbox {
+impl Default for LocalBoundingBox {
     fn default() -> Self {
         Self {
             start: Vector3::new(0.0, 0.0, 0.0),
@@ -17,7 +17,7 @@ impl Default for LocalHitbox {
     }
 }
 
-pub struct GlobalHitbox {
+pub struct GlobalBoundingBox {
     pub start: RelVec3,
     pub end: RelVec3,
 }

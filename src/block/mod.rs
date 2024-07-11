@@ -1,8 +1,6 @@
 use block_state::BlockState;
 use cgmath::Vector3;
 
-use crate::collision::hitbox::LocalHitbox;
-
 pub mod model;
 pub mod light;
 pub mod block_pallet;
@@ -14,7 +12,7 @@ pub const FACE_DIRECTIONS_NUM: usize = std::mem::variant_count::<FaceDirection>(
 pub type BlockId = u16;
 static LAST_ID: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Block {
     pub id: BlockId,
     pub name: String,

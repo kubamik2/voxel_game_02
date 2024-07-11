@@ -1,1 +1,1 @@
-pub mod hitbox;
+pub mod bounding_box;

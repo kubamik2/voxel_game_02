@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::{Deref, DerefMut}};
 
 use cgmath::{Point2, Point3, Vector2, Vector3, Vector4};
 
-use crate::collision::hitbox::LocalHitbox;
+use crate::collision::bounding_box::LocalBoundingBox;
 
 use super::{asset_loader::QuadIndicesMap, block_state::{BlockState, Value}, light::{LightLevel, LIGHT_LEVEL_BITS}, Block, FaceDirection, Properties, FACE_DIRECTIONS_NUM};
 
@@ -126,7 +126,7 @@ pub struct BlockModelVariant {
     pub required_state: Vec<(String, Value)>,
     pub standalone: bool,
     pub rotation: Vector3<f32>,
-    pub hitboxes: Box<[LocalHitbox]>,
+    pub hitboxes: Box<[LocalBoundingBox]>,
 }
 
 #[derive(serde::Deserialize)]
@@ -136,7 +136,7 @@ pub struct BlockModelVariantDeserialize {
     pub standalone: bool,
     pub rotation: Vector3<f32>,
     #[serde(default)]
-    pub hitboxes: Box<[LocalHitbox]>,
+    pub hitboxes: Box<[LocalBoundingBox]>,
 }
 
 
@@ -248,6 +248,8 @@ pub struct Face {
 }
 
 impl Face {
+    pub const INDICES_PER_FACE: usize = 6;
+    pub const VERTICES_PER_FACE: usize = 4;
     pub fn pack(&self) -> FacePacked {
         FacePacked(
             (self.lighting[0].get() as u64) |

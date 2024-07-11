@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(serde::Deserialize, Clone, Debug, Default)]
+#[derive(serde::Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct BlockState(HashMap<String, Value>);
  
 impl BlockState {

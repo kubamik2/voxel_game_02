@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
 use cgmath::{Point3, Vector2, Vector3};
 use wgpu::{util::DeviceExt, Device, Features, Queue};
 use winit::{event::{DeviceEvent, Event, WindowEvent}, event_loop::EventLoop};
 
-use crate::{block::quad_buffer::QuadBuffer, game_window::GameWindow, setttings::Settings, texture::Texture, BLOCK_MODEL_VARIANTS, QUADS};
-const S: usize = 2;
+use crate::{block::quad_buffer::QuadBuffer, game_window::GameWindow, setttings::Settings, texture::Texture, world::PARTS_PER_CHUNK, BLOCK_MODEL_VARIANTS, QUADS};
+const S: usize = 3;
 pub struct State<'a> {
     game_window: GameWindow,
     settings: Settings,
@@ -17,9 +17,7 @@ pub struct State<'a> {
     aspect_ratio: f32,
     settings_path: std::path::PathBuf,
     pipeline: wgpu::RenderPipeline,
-    face_buffer: wgpu::Buffer,
     quad_buffer: QuadBuffer,
-    face_buffer_bind_group: wgpu::BindGroup,
     model_buffer_bind_group: wgpu::BindGroup,
     view_projection_uniform: crate::camera::ViewProjectionUniform,
     view_projection_bind_group: wgpu::BindGroup,
@@ -28,9 +26,12 @@ pub struct State<'a> {
     index_buffer: wgpu::Buffer,
     texture_atlas: Texture,
     texture_atlas_bind_group: wgpu::BindGroup,
-    faces_num: usize,
     depth_texture: Texture,
-    translation_bind_groups: Vec<wgpu::BindGroup>,
+
+    mesher: crate::world::chunk::chunk_part::chunk_part_mesher::ChunkPartMesher,
+    chunk_map: crate::world::chunk::chunk_map::ChunkMap,
+    mesh_queue: VecDeque<(Vector2<i32>, usize)>,
+    now: std::time::Instant,
 }
 
 impl<'a> State<'a> {
@@ -57,7 +58,7 @@ impl<'a> State<'a> {
         };
         let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("device"),
-            required_features: Features::BUFFER_BINDING_ARRAY | Features::STORAGE_RESOURCE_BINDING_ARRAY,
+            required_features: Features::BUFFER_BINDING_ARRAY | Features::STORAGE_RESOURCE_BINDING_ARRAY | Features::MULTI_DRAW_INDIRECT,
             required_limits,
             ..Default::default()
         }, None).await?;
@@ -102,8 +103,6 @@ impl<'a> State<'a> {
                 }
             ]
         });
-        // let mut baked_block_models = crate::block::asset_loader::load_models("./assets/models").unwrap();
-        // let (block_map, block_list, block_models, quads) = crate::block::asset_loader::load_blocks("./assets/blocks", &mut baked_block_models).unwrap();
         let models = BLOCK_MODEL_VARIANTS.lock().unwrap().get_quad_block_models(&crate::block::Block { id: 0, name: "cobblestone".to_string(), block_state: crate::block::block_state::BlockState::new() }).unwrap();
         let quad_buffer = QuadBuffer::new(&device, &QUADS.lock().unwrap());
 
@@ -313,6 +312,27 @@ impl<'a> State<'a> {
         
         let depth_texture = Texture::create_depth_texture(&device, &surface_config, "depth_texture");
 
+        let mut mesher = crate::world::chunk::chunk_part::chunk_part_mesher::ChunkPartMesher::new(12);
+        let mut chunk_map = crate::world::chunk::chunk_map::ChunkMap::new();
+        let mut mesh_queue = VecDeque::new();
+        for y in 0..S {
+            for x in 0..S {
+                let chunk = crate::world::chunk::Chunk {
+                    mesh: crate::world::chunk::dynamic_chunk_model_mesh::DynamicChunkModelMesh::new(&device),
+                    parts: std::array::from_fn(|_| crate::world::chunk::chunk_part::ChunkPart::new_cobblesone()),
+                    position: Vector2::new(x, y).cast().unwrap(),
+                    translation: crate::world::chunk::ChunkTranslation::new(&device, Vector2::new(x, y).cast().unwrap())
+                };
+                chunk_map.insert(chunk.position, chunk);
+                for i in 0..12 {
+                    mesh_queue.push_back((Vector2::new(x, y).cast().unwrap(), i));
+                }
+            }
+        }
+        
+
+
+
         Ok((
             Self {
                 game_window,
@@ -325,9 +345,7 @@ impl<'a> State<'a> {
                 aspect_ratio,
                 settings_path: settings_path.to_owned(),
                 pipeline,
-                face_buffer,
                 quad_buffer,
-                face_buffer_bind_group,
                 model_buffer_bind_group: quad_buffer_bind_group,
                 view_projection_uniform,
                 view_projection_bind_group,
@@ -336,9 +354,11 @@ impl<'a> State<'a> {
                 index_buffer,
                 texture_atlas,
                 texture_atlas_bind_group,
-                faces_num,
                 depth_texture,
-                translation_bind_groups
+                mesher,
+                chunk_map,
+                mesh_queue,
+                now: std::time::Instant::now()
             }, 
             event_loop
         ))
@@ -386,7 +406,7 @@ impl<'a> State<'a> {
                         },
                         WindowEvent::RedrawRequested => {
                             // state.game_window.window().set_cursor_position(winit::dpi::PhysicalPosition::new(state.width() / 2, state.height() / 2)).unwrap();
-                            println!("{:.1?} fps", 1.0 / last_render_instant.elapsed().as_secs_f64());
+                            // println!("{:.1?} fps", 1.0 / last_render_instant.elapsed().as_secs_f64());
                             last_render_instant = std::time::Instant::now();
                             state.render();
                         }
@@ -438,22 +458,37 @@ impl<'a> State<'a> {
                 timestamp_writes: None,
                 occlusion_query_set: None
             });
+            for _ in 0..self.mesher.idle_threads() {
+                if self.mesh_queue.len() == 0 { break; }
+                let (chunk_position, chunk_part_index) = self.mesh_queue.pop_front().unwrap();
+                let expanded_chunk_part = crate::world::chunk::chunk_part::expanded_chunk_part::ExpandedChunkPart::new(&self.chunk_map, chunk_position, chunk_part_index).unwrap();
+                self.mesher.mesh_chunk_part(expanded_chunk_part, chunk_position, chunk_part_index);
+            }
+
+            for meshing_data in self.mesher.collect_meshing_outputs() {
+                let chunk = self.chunk_map.get_mut(meshing_data.chunk_position).unwrap();
+                chunk.mesh.insert_meshed_chunk(&self.device, &self.queue, meshing_data, &mut self.mesh_queue);
+            }
 
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.view_projection_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.face_buffer_bind_group, &[]);
             render_pass.set_bind_group(2, &self.model_buffer_bind_group, &[]);
             render_pass.set_bind_group(3, &self.texture_atlas_bind_group, &[]);
-
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            
-            for tz in 0..S {
-                for tx in 0..S {
-                    render_pass.set_bind_group(4, &self.translation_bind_groups[tx + tz * S], &[]);
-                    render_pass.draw_indexed(0..self.faces_num as u32 * 6, 0, 0..1);
+
+            for y in 0..S {
+                for x in 0..S {
+                    let chunk_pos = Vector2::new(x as i32, y as i32);
+                    let chunk = self.chunk_map.get(chunk_pos).unwrap();
+
+                    render_pass.set_bind_group(1, &chunk.mesh.face_buffer_bind_group, &[]);
+                    render_pass.set_bind_group(4, &chunk.translation.bind_group, &[]);
+
+                    render_pass.multi_draw_indexed_indirect(&chunk.mesh.indirect_buffer, 0, PARTS_PER_CHUNK as u32);
                 }
             }
         }
+
         self.queue.submit(std::iter::once(encoder.finish()));
         self.game_window.window().pre_present_notify();
         output.present();

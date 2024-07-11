@@ -51,7 +51,7 @@ fn construct_face(vertex_index: u32) -> Face {
 }
 
 @vertex
-fn vs_main(@builtin(vertex_index) i: u32) -> VertexOutput {
+fn vs_main(@builtin(vertex_index) i: u32, @builtin(instance_index) instance_index: u32) -> VertexOutput {
     let face = construct_face(i);
     let quad = quad_buffer[face.quad_index];
     
@@ -60,8 +60,9 @@ fn vs_main(@builtin(vertex_index) i: u32) -> VertexOutput {
     var vertex_positions = quad.vertex_positions;
     var vertex = vertex_positions[i_mod_4] + vec3f(f32(face.block_position[0]), f32(face.block_position[1]), f32(face.block_position[2]));
 
-    vertex.x += f32(translation.x);
-    vertex.z += f32(translation.y);
+    vertex.x += f32(translation.x * 32);
+    vertex.z += f32(translation.y * 32);
+    vertex.y += f32(instance_index);
     var uvs = quad.uv;
     let uv = uvs[i_mod_4];
 

@@ -1,0 +1,21 @@
+{
+    "variants": [
+        {
+            "applied_model": "air",
+            "required_state": [
+                
+            ],
+            "standalone": true,
+            "rotation": [0.0, 0.0, 0.0]
+        }
+    ],
+    "default_state": {
+
+    },
+    "properties": {
+        "alpha_mode": "Transparent",
+        "targetable": false,
+        "replaceable": true,
+        "collideable": false
+    }
+}

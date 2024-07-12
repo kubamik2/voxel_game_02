@@ -1,0 +1,16 @@
+{
+    "cuboids": [
+        {
+            "start": [0.0, 0.0, 0.0],
+            "end": [1.0, 1.0, 1.0],
+            "faces": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+            ]
+        }
+    ]
+}

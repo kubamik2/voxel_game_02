@@ -3,6 +3,8 @@ pub mod expanded_chunk_part;
 
 use std::ops::Index;
 
+use rand::Rng;
+
 use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, Block}, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP};
 
 pub const CHUNK_SIZE: usize = 32;
@@ -17,23 +19,33 @@ pub enum GenerationStage {
 pub struct ChunkPart {
     pub block_pallet: BlockPallet,
     pub block_layers: BlockLayers,
-    pub generation_stage: GenerationStage, 
+    pub generation_stage: GenerationStage,
+    pub meshing_scheduled: bool,
+    pub meshed: bool,
 }
 
 impl ChunkPart {
     pub fn new_cobblesone() -> Self {
         let block_pallet = BlockPallet::new_air();
         let block_layers = BlockLayers::new_uncompressed();
-        let mut chunk = Self { block_layers, block_pallet, generation_stage: GenerationStage::Terrain };
-        let cobblestone_id = chunk.block_pallet.insert_count(BLOCK_MAP.lock().unwrap().get("cobblestone").unwrap().clone().into(), 0);
+        let mut chunk = Self { block_layers, block_pallet, generation_stage: GenerationStage::Terrain, meshing_scheduled: false, meshed: false };
+        let cobblestone_id = chunk.block_pallet.insert_count(BLOCK_MAP.get("cobblestone").unwrap().clone().into(), 0);
+        let dirt_id = chunk.block_pallet.insert_count(BLOCK_MAP.get("dirt").unwrap().clone().into(), 0);
 
+        let mut rng = rand::thread_rng();
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    chunk.set_block_pallet_id((x, y, z), cobblestone_id);
+                    if rng.gen_bool(0.5) { continue; }
+                    if rng.gen_bool(0.5) {
+                        chunk.set_block_pallet_id((x, y, z), cobblestone_id);
+                    } else {
+                        chunk.set_block_pallet_id((x, y, z), dirt_id);
+                    }
                 }
             }
         }
+        chunk.set_block_pallet_id((0, 0, 0), 0);
 
         chunk.block_pallet.clean_up();
         chunk.block_layers.compress();

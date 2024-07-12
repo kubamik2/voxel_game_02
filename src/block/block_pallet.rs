@@ -19,8 +19,8 @@ impl BlockPallet {
     pub fn new_air() -> Self {
         let items = vec![Some(
             BlockPalletItem {
-                block: Block { id: 0, name: "air".to_string(), block_state: BlockState::new() },
-                count: (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as BlockPalletItemId,
+                block: Block::new(0, "air", BlockState::new()),
+                count: (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE + 1) as BlockPalletItemId,
             },
         )];
 

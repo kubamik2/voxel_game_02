@@ -16,14 +16,20 @@ pub struct CuboidBlockModel {
 
 impl CuboidBlockModel {
     pub fn bake(&self) -> QuadBlockModel {
-        let mut quads = vec![];
-        let mut texture_indices = vec![];
+        let mut quads_per_face : [Vec<Quad>; FACE_DIRECTIONS_NUM] = std::array::from_fn(|_| vec![]);
+        let mut texture_indices_per_face: [Vec<u16>; FACE_DIRECTIONS_NUM] = std::array::from_fn(|_| vec![]);
+        let mut quad_culling_per_face: [Vec<bool>; FACE_DIRECTIONS_NUM] = std::array::from_fn(|_| vec![]);
         for cuboid in self.cuboids.iter() {
-            cuboid.append_quads(&mut quads);
-            cuboid.append_texture_indices(&mut texture_indices);
+            cuboid.append_quads(&mut quads_per_face);
+            cuboid.append_texture_indices(&mut texture_indices_per_face);
+            cuboid.append_quad_culling(&mut quad_culling_per_face)
         }
 
-        QuadBlockModel { quads: quads.into_boxed_slice(), texture_indices: texture_indices.into_boxed_slice() }
+        QuadBlockModel {
+            quads_per_face: quads_per_face.map(|f| f.into_boxed_slice()),
+            texture_indices_per_face: texture_indices_per_face.map(|f| f.into_boxed_slice()),
+            quad_culling_per_face: quad_culling_per_face.map(|f| f.into_boxed_slice()),
+        }
     }
 }
 
@@ -35,11 +41,12 @@ pub struct Cuboid {
 }
 
 impl Cuboid {
-    pub fn append_quads(&self, quads: &mut Vec<Quad>) {
+    pub fn append_quads(&self, quads_per_face: &mut [Vec<Quad>; FACE_DIRECTIONS_NUM]) {
         for face_num in 0..FACE_DIRECTIONS_NUM {
             let Some(cuboid_face) = &self.faces[face_num] else { continue; };
             let face_direction = unsafe { std::mem::transmute::<u8, FaceDirection>(face_num as u8) }; 
             let normal = face_direction.normal();
+            let quads = &mut quads_per_face[face_num];
             
             let vertex_positions = match face_direction {
                 FaceDirection::PositiveX => [
@@ -97,10 +104,19 @@ impl Cuboid {
         }
     }
 
-    pub fn append_texture_indices(&self, texture_indices: &mut Vec<u16>) {
+    pub fn append_texture_indices(&self, texture_indices_per_face: &mut [Vec<u16>; FACE_DIRECTIONS_NUM]) {
         for face_num in 0..FACE_DIRECTIONS_NUM {
             let Some(face) = self.faces[face_num] else { continue; };
+            let texture_indices = &mut texture_indices_per_face[face_num];
             texture_indices.push(face.texture_index);
+        }
+    }
+
+    pub fn append_quad_culling(&self, quad_culling_per_face: &mut [Vec<bool>; FACE_DIRECTIONS_NUM]) {
+        for face_num in 0..FACE_DIRECTIONS_NUM {
+            let Some(face) = self.faces[face_num] else { continue; };
+            let quad_culling = &mut quad_culling_per_face[face_num];
+            quad_culling.push(face.culling);
         }
     }
 }
@@ -121,8 +137,9 @@ const fn bool_true() -> bool {
 #[derive(Debug, Clone)]
 pub struct BlockModelVariant {
     pub applied_model: String,
-    pub quad_indices: Box<[u16]>,
-    pub texture_indices: Box<[u16]>,
+    pub quad_indices_per_face: [Box<[u16]>; FACE_DIRECTIONS_NUM],
+    pub texture_indices_per_face: [Box<[u16]>; FACE_DIRECTIONS_NUM],
+    pub quad_culling_per_face: [Box<[bool]>; FACE_DIRECTIONS_NUM],
     pub required_state: Vec<(String, Value)>,
     pub standalone: bool,
     pub rotation: Vector3<f32>,
@@ -153,7 +170,7 @@ pub struct BlockDeserialize {
 
 #[derive(Debug, Clone)]
 pub struct BlockModelVariants {
-    models: HashMap<String, Box<[BlockModelVariant]>>
+    models: HashMap<Box<str>, Box<[BlockModelVariant]>>
 }
 
 impl BlockModelVariants {
@@ -161,7 +178,9 @@ impl BlockModelVariants {
         Self { models: HashMap::new() }
     }
 
-    pub fn get_quad_block_models(&self, block: &Block) -> Option<Box<[QuadIndexBlockModel]>> {
+    #[inline]
+    pub fn get_quad_block_models<'a>(&'a self, block: &Block) -> Option<Box<[QuadIndexBlockModelRef<'a>]>> {
+        // let now = std::time::Instant::now();
         let mut models = vec![];
         let Some(variants) = self.models.get(&block.name) else { return None; };
 
@@ -169,49 +188,63 @@ impl BlockModelVariants {
             'inner: for (name, value) in variant.required_state.iter() {
                 let Some(block_state_value) = block.block_state.get(&name) else { continue 'inner; };
                 if *block_state_value == *value {
-                    let quad_index_block_model = QuadIndexBlockModel {
-                        quad_indices: variant.quad_indices.clone(),
-                        texture_indices: variant.texture_indices.clone(),
+                    let quad_index_block_model = QuadIndexBlockModelRef {
+                        quad_indices_per_face: &variant.quad_indices_per_face,
+                        texture_indices_per_face: &variant.texture_indices_per_face,
+                        quad_culling_per_face: &variant.quad_culling_per_face,
                     };
                     if variant.standalone {
                         models.clear();
                         models.push(quad_index_block_model);
+                        // dbg!(now.elapsed());
                         return Some(models.into_boxed_slice());
                     }
                     models.push(quad_index_block_model);
                 }
             }
             if variant.required_state.is_empty() {
-                let quad_index_block_model = QuadIndexBlockModel {
-                    quad_indices: variant.quad_indices.clone(),
-                    texture_indices: variant.texture_indices.clone(),
+                let quad_index_block_model = QuadIndexBlockModelRef {
+                    quad_indices_per_face: &variant.quad_indices_per_face,
+                    texture_indices_per_face: &variant.texture_indices_per_face,
+                    quad_culling_per_face: &variant.quad_culling_per_face,
                 };
                 if variant.standalone {
                     models.clear();
                     models.push(quad_index_block_model);
+                    // dbg!(now.elapsed());
                     return Some(models.into_boxed_slice());
                 }
                 models.push(quad_index_block_model);
             }
         }
+        // dbg!(now.elapsed());
         Some(models.into_boxed_slice())
     }
 
     pub fn insert(&mut self, block_name: String, model_variants: Box<[BlockModelVariant]>) {
-        self.models.insert(block_name, model_variants);
+        self.models.insert(block_name.into_boxed_str(), model_variants);
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct QuadBlockModel {
-    pub quads: Box<[Quad]>,
-    pub texture_indices: Box<[u16]>,
+    pub quads_per_face: [Box<[Quad]>; FACE_DIRECTIONS_NUM],
+    pub texture_indices_per_face: [Box<[u16]>; FACE_DIRECTIONS_NUM],
+    pub quad_culling_per_face: [Box<[bool]>; FACE_DIRECTIONS_NUM],
 }
 
 #[derive(Debug, Clone)]
 pub struct QuadIndexBlockModel {
-    pub quad_indices: Box<[u16]>,
-    pub texture_indices: Box<[u16]>,
+    pub quad_indices_per_face: [Box<[u16]>; FACE_DIRECTIONS_NUM],
+    pub texture_indices_per_face: [Box<[u16]>; FACE_DIRECTIONS_NUM],
+    pub quad_culling_per_face: [Box<[bool]>; FACE_DIRECTIONS_NUM],
+}
+
+#[derive(Clone)]
+pub struct QuadIndexBlockModelRef<'a> {
+    pub quad_indices_per_face: &'a [Box<[u16]>; FACE_DIRECTIONS_NUM],
+    pub texture_indices_per_face: &'a [Box<[u16]>; FACE_DIRECTIONS_NUM],
+    pub quad_culling_per_face: &'a [Box<[bool]>; FACE_DIRECTIONS_NUM],
 }
 
 

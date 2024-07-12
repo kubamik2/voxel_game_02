@@ -5,16 +5,41 @@
             "end": [1.0, 1.0, 1.0],
             "faces": [
                 {
-                    "uv_start": [0.0, 0.0],
-                    "uv_end": [1.0, 1.0],
-                    "texture_index": 0,
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture_index": 1,
                     "culling": true
                 },
-                null,
-                null,
-                null,
-                null,
-                null
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture_index": 1,
+                    "culling": true
+                },
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture_index": 1,
+                    "culling": true
+                },
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture_index": 1,
+                    "culling": true
+                },
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture_index": 1,
+                    "culling": true
+                },
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture_index": 1,
+                    "culling": true
+                }
             ]
         }
     ]

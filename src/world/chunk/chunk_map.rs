@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use super::Chunk;
+use cgmath::Vector2;
+
+use super::{chunk_part::chunk_part_mesher::MeshingOutput, Chunk};
 
 pub struct ChunkMap {
     chunks: HashMap<(i32, i32), Chunk>

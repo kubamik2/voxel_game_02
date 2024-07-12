@@ -2,7 +2,7 @@ use cgmath::Vector2;
 
 use crate::{block::model::{Face, FacePacked}, world::PARTS_PER_CHUNK};
 
-use super::chunk_part::{chunk_part_mesher::MeshingOutput, CHUNK_SIZE};
+use super::{chunk_map::ChunkMap, chunk_part::{chunk_part_mesher::MeshingOutput, CHUNK_SIZE}};
 
 static FACE_BUFFER_BIND_GROUP_LAYOUT: std::sync::OnceLock<wgpu::BindGroupLayout> = std::sync::OnceLock::new();
 
@@ -16,7 +16,7 @@ pub struct DynamicChunkModelMesh {
 
 impl DynamicChunkModelMesh {
     pub const MIN_BUCKET_SIZE: u32 = Self::MIN_BUCKET_ELEMENTS * std::mem::size_of::<Face>() as u32;
-    pub const MIN_BUCKET_ELEMENTS: u32 = 200_000;
+    pub const MIN_BUCKET_ELEMENTS: u32 = 64;
 
     pub fn new(device: &wgpu::Device) -> Self {
         let face_buffer = Self::create_face_buffer(device, (Self::MIN_BUCKET_SIZE as usize * PARTS_PER_CHUNK) as u64);
@@ -102,34 +102,37 @@ impl DynamicChunkModelMesh {
         }
     }
 
-    pub fn insert_meshed_chunk(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, meshing_data: MeshingOutput, mesh_queue: &mut std::collections::VecDeque<(Vector2<i32>, usize)>) {
-        let faces_size = meshing_data.faces.len() as u32;
-        let chunk_part_index = meshing_data.chunk_part_index;
-        let chunk_position = meshing_data.chunk_position;
+    // pub fn insert_meshed_chunk_part(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, meshing_data: MeshingOutput, mesh_queue: &mut std::collections::VecDeque<(Vector2<i32>, usize)>, chunk_map: &mut ChunkMap) {
+    //     let faces_size = meshing_data.faces.len() as u32;
+    //     let chunk_part_index = meshing_data.chunk_part_index;
+    //     let chunk_position = meshing_data.chunk_position;
 
-        let mut needs_resizing = false;
-        while self.face_bucket_elements[chunk_part_index] < faces_size {
-            self.face_bucket_elements[chunk_part_index] *= 2;
-            needs_resizing = true;
-        }
+    //     let mut needs_resizing = false;
+    //     while self.face_bucket_elements[chunk_part_index] < faces_size {
+    //         self.face_bucket_elements[chunk_part_index] *= 2;
+    //         needs_resizing = true;
+    //     }
 
-        if needs_resizing {
-            self.resize(device);
-            for i in 0..PARTS_PER_CHUNK {
-                if i == chunk_part_index { continue; }
-                if !mesh_queue.contains(&(chunk_position, chunk_part_index)) {
-                    mesh_queue.push_front((chunk_position, chunk_part_index));
-                }
-            }
-        }
+    //     if needs_resizing {
+    //         self.resize(device);
+    //         let chunk = chunk_map.get_mut(meshing_data.chunk_position).unwrap();
+    //         for i in 0..PARTS_PER_CHUNK {
+    //             if i == chunk_part_index { continue; }
+    //             let chunk_part = &mut chunk.parts[i];
+    //             if chunk_part.meshing_scheduled { continue; }
+    //             chunk_part.meshed = false;
+    //             chunk_part.meshing_scheduled = true;
+    //             mesh_queue.push_front((chunk_position, chunk_part_index));
+    //         }
+    //     }
 
-        let indirect_buffer_offset = (chunk_part_index * std::mem::size_of::<wgpu::util::DrawIndexedIndirectArgs>()) as u64;
-        let face_buffer_offset = ((0..chunk_part_index).map(|i| self.face_bucket_elements[i]).sum::<u32>() * std::mem::size_of::<FacePacked>() as u32) as u64;
-        if meshing_data.faces_num > 0 {
-            queue.write_buffer(&self.face_buffer, face_buffer_offset, bytemuck::cast_slice(&meshing_data.faces));
-        }
-        queue.write_buffer(&self.indirect_buffer, indirect_buffer_offset, self.create_indirect_args(meshing_data.faces_num, chunk_part_index).as_bytes())
-    }
+    //     let indirect_buffer_offset = (chunk_part_index * std::mem::size_of::<wgpu::util::DrawIndexedIndirectArgs>()) as u64;
+    //     let face_buffer_offset = ((0..chunk_part_index).map(|i| self.face_bucket_elements[i]).sum::<u32>() * std::mem::size_of::<FacePacked>() as u32) as u64;
+    //     if meshing_data.faces_num > 0 {
+    //         queue.write_buffer(&self.face_buffer, face_buffer_offset, bytemuck::cast_slice(&meshing_data.faces));
+    //     }
+    //     queue.write_buffer(&self.indirect_buffer, indirect_buffer_offset, self.create_indirect_args(meshing_data.faces_num, chunk_part_index).as_bytes())
+    // }
 }
 
 impl Drop for DynamicChunkModelMesh {

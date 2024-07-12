@@ -14,17 +14,62 @@ static LAST_ID: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
-    pub id: BlockId,
-    pub name: String,
+    id: BlockId,
+    name: Box<str>,
     pub block_state: BlockState
+}
+
+impl Block {
+    pub fn new(id: BlockId, name: &str, block_state: BlockState) -> Self {
+        Self {
+            id,
+            name: name.into(), 
+            block_state,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn id(&self) -> &BlockId {
+        &self.id
+    }
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct BlockInformation {
-    pub id: BlockId,
-    pub name: String,
-    pub default_state: BlockState,
-    pub properties: Properties,
+    id: BlockId,
+    name: Box<str>,
+    default_state: BlockState,
+    properties: Properties,
+}
+
+impl BlockInformation {
+    pub fn new(id: BlockId, name: &str, default_state: BlockState, properties: Properties) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            default_state,
+            properties,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn id(&self) -> &BlockId {
+        &self.id
+    }
+
+    pub fn default_state(&self) -> &BlockState {
+        &self.default_state
+    }
+
+    pub fn properties(&self) -> &Properties {
+        &self.properties
+    }
 }
 
 impl Into<Block> for  BlockInformation {
@@ -59,7 +104,14 @@ pub enum AlphaMode {
     Translucent
 }
 
+impl AlphaMode {
+    pub fn is_opaque(&self) -> bool {
+        *self == AlphaMode::Opaque
+    }
+}
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaceDirection {
     PositiveX,
     NegativeX,

@@ -5,7 +5,9 @@ use wgpu::{util::DeviceExt, Device, Features, Queue};
 use winit::{event::{DeviceEvent, Event, WindowEvent}, event_loop::EventLoop};
 
 use crate::{block::quad_buffer::QuadBuffer, game_window::GameWindow, setttings::Settings, texture::Texture, world::PARTS_PER_CHUNK, BLOCK_MODEL_VARIANTS, QUADS};
+
 const S: usize = 3;
+
 pub struct State<'a> {
     game_window: GameWindow,
     settings: Settings,
@@ -103,58 +105,8 @@ impl<'a> State<'a> {
                 }
             ]
         });
-        let models = BLOCK_MODEL_VARIANTS.lock().unwrap().get_quad_block_models(&crate::block::Block { id: 0, name: "cobblestone".to_string(), block_state: crate::block::block_state::BlockState::new() }).unwrap();
-        let quad_buffer = QuadBuffer::new(&device, &QUADS.lock().unwrap());
+        let quad_buffer = QuadBuffer::new(&device, &QUADS);
 
-        let mut faces = vec![];
-        let translation_buffer_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0, 
-                count: None,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
-                visibility: wgpu::ShaderStages::VERTEX
-            }]
-        });
-        for y in 0..32 {
-            for z in 0..32 {
-                for x in 0..32 {
-                    for model in models.iter() {
-                        assert!(model.quad_indices.len() == model.texture_indices.len());
-                        for (quad_i, texture_i) in model.quad_indices.iter().zip(model.texture_indices.iter()) {
-                            faces.push(crate::block::model::Face {
-                                block_position: [x, y, z],
-                                lighting: [crate::block::light::LightLevel::new(0).unwrap(); 4],
-                                quad_index: *quad_i,
-                                texture_index: *texture_i
-                            }.pack());
-                        }
-                    }
-                }
-            }
-        }
-        let mut translation_bind_groups = vec![];
-        for tz in 0..S as i32 {
-            for tx in 0..S as i32 {   
-                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(&[tx * 32, tz * 32]),
-                    usage: wgpu::BufferUsages::UNIFORM
-                });
-
-                translation_bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buffer.as_entire_binding()
-                    }],
-                    layout: &translation_buffer_bind_group_layout
-                }));
-            }
-        }
-
-
-        let faces_num = faces.len();
 
         const INDICES: &[u32] = &[0, 1, 2,  1, 3, 2];
         let mut indices = vec![];
@@ -167,39 +119,6 @@ impl<'a> State<'a> {
             contents: bytemuck::cast_slice(&indices)
         });
         
-        let face_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            usage: wgpu::BufferUsages::STORAGE,
-            contents: bytemuck::cast_slice(&faces)
-        });
-
-        let face_buffer_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    count: None,
-                    ty: wgpu::BindingType::Buffer {
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                        ty: wgpu::BufferBindingType::Storage { read_only: true }
-                    },
-                    visibility: wgpu::ShaderStages::VERTEX
-                }
-            ]
-        });
-
-        let face_buffer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &face_buffer_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(face_buffer.as_entire_buffer_binding())
-                }
-            ]
-        });
-
         let quad_buffer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &model_buffer_bind_group_layout,
@@ -233,7 +152,7 @@ impl<'a> State<'a> {
                 }
             ]
         });
-        let texture_atlas = crate::texture::Texture::from_bytes(&device, &queue, include_bytes!("../assets/atlases/debug.png"), "texture_atlas")?;
+        let texture_atlas = crate::texture::Texture::from_bytes(&device, &queue, include_bytes!("../assets/atlases/block_01.png"), "texture_atlas")?;
         let texture_atlas_bind_group_layout = Texture::texture_atlas_bind_group_layout(&device);
         let texture_atlas_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("texture_atlas_bind_group"),
@@ -254,10 +173,10 @@ impl<'a> State<'a> {
             label: None,
             bind_group_layouts: &[
                 &view_projection_bind_group_layout,
-                &face_buffer_bind_group_layout,
+                crate::world::chunk::dynamic_chunk_model_mesh::DynamicChunkModelMesh::get_or_init_face_buffer_bind_group_layout(&device),
                 &model_buffer_bind_group_layout,
                 &texture_atlas_bind_group_layout,
-                &translation_buffer_bind_group_layout
+                crate::world::chunk::ChunkTranslation::bind_group_layout(&device),
             ],
             push_constant_ranges: &[],
         });
@@ -279,7 +198,8 @@ impl<'a> State<'a> {
             vertex: wgpu::VertexState {
                 buffers: &[],
                 entry_point: "vs_main",
-                module: &shaders
+                module: &shaders,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 entry_point: "fs_main",
@@ -290,7 +210,8 @@ impl<'a> State<'a> {
                         blend: Some(wgpu::BlendState::REPLACE),
                         write_mask: wgpu::ColorWrites::all()
                     }
-                )]
+                )],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             layout: Some(&pipeline_layout),
             multisample: wgpu::MultisampleState {
@@ -320,17 +241,19 @@ impl<'a> State<'a> {
                 let chunk = crate::world::chunk::Chunk {
                     mesh: crate::world::chunk::dynamic_chunk_model_mesh::DynamicChunkModelMesh::new(&device),
                     parts: std::array::from_fn(|_| crate::world::chunk::chunk_part::ChunkPart::new_cobblesone()),
-                    position: Vector2::new(x, y).cast().unwrap(),
-                    translation: crate::world::chunk::ChunkTranslation::new(&device, Vector2::new(x, y).cast().unwrap())
+                    position: Vector2::new(x as i32, y as i32),
+                    translation: crate::world::chunk::ChunkTranslation::new(&device, Vector2::new(x as i32, y as i32))
                 };
+                let pos = chunk.position;
                 chunk_map.insert(chunk.position, chunk);
+                let chunk = chunk_map.get_mut(pos).unwrap();
                 for i in 0..12 {
-                    mesh_queue.push_back((Vector2::new(x, y).cast().unwrap(), i));
+                    let part = &mut chunk.parts[i];
+                    part.meshing_scheduled = true;
+                    mesh_queue.push_back((pos, i));
                 }
             }
         }
-        
-
 
 
         Ok((
@@ -385,8 +308,10 @@ impl<'a> State<'a> {
         let settings_path = settings_path.into();
         let (mut state, event_loop) = pollster::block_on(Self::new(&settings_path))?;
         let mut last_render_instant = std::time::Instant::now();
+
         event_loop.run(move |event, elwt| {
             elwt.set_control_flow(winit::event_loop::ControlFlow::Poll);
+
             if let Ok(settings_file_metadata) = std::fs::metadata(&settings_path) {
                 if let Ok(settings_last_modified_new) = settings_file_metadata.modified() {
                     if state.settings_last_modified != settings_last_modified_new {
@@ -405,7 +330,9 @@ impl<'a> State<'a> {
                             elwt.exit();
                         },
                         WindowEvent::RedrawRequested => {
-                            // state.game_window.window().set_cursor_position(winit::dpi::PhysicalPosition::new(state.width() / 2, state.height() / 2)).unwrap();
+                            if state.game_window.window().has_focus() {
+                                state.game_window.window().set_cursor_position(winit::dpi::PhysicalPosition::new(state.width() / 2, state.height() / 2)).unwrap();
+                            }
                             // println!("{:.1?} fps", 1.0 / last_render_instant.elapsed().as_secs_f64());
                             last_render_instant = std::time::Instant::now();
                             state.render();
@@ -435,6 +362,10 @@ impl<'a> State<'a> {
         Ok(())
     }
 
+    pub fn update_mesher(&mut self) {
+
+    }
+
     pub fn render(&mut self) {
         let output = self.surface.get_current_texture().unwrap();
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -458,28 +389,30 @@ impl<'a> State<'a> {
                 timestamp_writes: None,
                 occlusion_query_set: None
             });
+            
+            for meshing_data in self.mesher.collect_meshing_outputs() {
+                let chunk = self.chunk_map.get_mut(meshing_data.chunk_position).unwrap();
+                chunk.insert_meshed_chunk_part(&self.device, &self.queue, meshing_data, &mut self.mesh_queue);
+            }
+            
             for _ in 0..self.mesher.idle_threads() {
                 if self.mesh_queue.len() == 0 { break; }
                 let (chunk_position, chunk_part_index) = self.mesh_queue.pop_front().unwrap();
                 let expanded_chunk_part = crate::world::chunk::chunk_part::expanded_chunk_part::ExpandedChunkPart::new(&self.chunk_map, chunk_position, chunk_part_index).unwrap();
-                self.mesher.mesh_chunk_part(expanded_chunk_part, chunk_position, chunk_part_index);
+                self.mesher.mesh_chunk_part(expanded_chunk_part, chunk_position, chunk_part_index).unwrap();
             }
 
-            for meshing_data in self.mesher.collect_meshing_outputs() {
-                let chunk = self.chunk_map.get_mut(meshing_data.chunk_position).unwrap();
-                chunk.mesh.insert_meshed_chunk(&self.device, &self.queue, meshing_data, &mut self.mesh_queue);
-            }
 
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.view_projection_bind_group, &[]);
             render_pass.set_bind_group(2, &self.model_buffer_bind_group, &[]);
             render_pass.set_bind_group(3, &self.texture_atlas_bind_group, &[]);
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
             for y in 0..S {
                 for x in 0..S {
                     let chunk_pos = Vector2::new(x as i32, y as i32);
                     let chunk = self.chunk_map.get(chunk_pos).unwrap();
+                    if !chunk.parts.iter().all(|f| f.meshed) { continue; }
 
                     render_pass.set_bind_group(1, &chunk.mesh.face_buffer_bind_group, &[]);
                     render_pass.set_bind_group(4, &chunk.translation.bind_group, &[]);

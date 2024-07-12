@@ -5,6 +5,7 @@ struct CameraUniform {
 struct VertexOutput {
     @builtin(position) clip_position: vec4f,
     @location(0) uv: vec2f,
+    @location(1) texture_index: u32,
 }
 
 struct ModelQuad {
@@ -70,14 +71,18 @@ fn vs_main(@builtin(vertex_index) i: u32, @builtin(instance_index) instance_inde
 
     out.clip_position = camera.view_projection * vec4f(vertex, 1.0);
     out.uv = uv;
+    out.texture_index = face.texture_index;
     return out;
 }
 
 @group(3) @binding(0) var t_diffuse: texture_2d<f32>;
 @group(3) @binding(1) var s_diffuse: sampler;
-
+const BLOCK_SIZE: f32 = 1.0 / 16;
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let color = textureSample(t_diffuse, s_diffuse, in.uv);
+    let texture_coords = vec2u(in.texture_index % 16u, in.texture_index / 16u);
+    let base_uv = vec2f(f32(texture_coords.x) * BLOCK_SIZE, f32(texture_coords.y) * BLOCK_SIZE);
+    let uv = base_uv + (in.uv * vec2f(BLOCK_SIZE, BLOCK_SIZE));
+    let color = textureSample(t_diffuse, s_diffuse, uv);
     return color;
 }

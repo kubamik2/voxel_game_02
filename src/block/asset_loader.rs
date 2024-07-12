@@ -2,7 +2,13 @@ use std::{collections::HashMap, io::Read, ops::Index};
 
 use cgmath::{Deg, Rotation, Vector3};
 
+use crate::block::FACE_DIRECTIONS_NUM;
+
 use super::{model::{BlockDeserialize, BlockModelVariant, BlockModelVariants, CuboidBlockModel, QuadBlockModel, QuadIndexBlockModel, QuadRaw}, quad_buffer::QuadBuffer, Block, BlockId, BlockInformation};
+const TEXTURE_ATLAS_HEIGHT_IN_BLOCKS: u32 = 16;
+const TEXTURE_ATLAS_WIDTH_IN_BLOCKS: u32 = 16;
+const TEXTURE_ATLAS_UV_HEIGHT_PER_BLOCK: f32 = 1.0 / TEXTURE_ATLAS_HEIGHT_IN_BLOCKS as f32;
+const TEXTURE_ATLAS_UV_WIDTH_PER_BLOCK: f32 = 1.0 / TEXTURE_ATLAS_WIDTH_IN_BLOCKS as f32;
 
 pub fn load_models<T: Into<std::path::PathBuf>>(path: T) -> anyhow::Result<BaseQuadBlockModels> {
     // load directory
@@ -47,12 +53,7 @@ pub fn load_blocks<T: Into<std::path::PathBuf>>(path: T, baked_block_models: &Ba
         std::fs::File::open(entry.path())?.read_to_string(&mut contents)?;
         let block_deserialize: BlockDeserialize = serde_json::from_str(&contents)?;
 
-        let block_info = BlockInformation {
-            id,
-            name: block_name.clone(),
-            default_state: block_deserialize.default_state,
-            properties: block_deserialize.properties,
-        };
+        let block_info = BlockInformation::new(id, &block_name, block_deserialize.default_state, block_deserialize.properties);
 
         // add all block model variants to a hashmap
         let mut block_model_variants = vec![];
@@ -64,22 +65,30 @@ pub fn load_blocks<T: Into<std::path::PathBuf>>(path: T, baked_block_models: &Ba
                     let mut quad_block_model = baked_block_models.get(&variant.applied_model).unwrap().clone();
                     quad_block_model = create_rotated_quad_model(quad_block_model, variant.rotation);
 
-                    let quads_len = quads.len();
-                    quads.extend(quad_block_model.quads.iter().map(|f| f.into_raw()));
+                    let mut quad_indices_per_face: [Box<[u16]>; FACE_DIRECTIONS_NUM] = [Box::new([]), Box::new([]), Box::new([]), Box::new([]), Box::new([]), Box::new([])];
+                    for (i, model_quads ) in quad_block_model.quads_per_face.into_iter().enumerate() {
+                        let quads_len = quads.len();
+                        quads.extend(model_quads.iter().map(|f| f.into_raw()));
+                        let quad_indices = (quads_len..quads.len()).map(|f| f as u16).collect::<Box<[u16]>>();
+                        quad_indices_per_face[i] = quad_indices;
+                    }
+                    // quads.extend(quad_block_model.quads_per_face.iter().map(|f| f.into_raw()));
 
                     assert!(quads.len() < u16::MAX as usize);
 
-                    let quad_indices = (quads_len..quads_len + quad_block_model.quads.len()).map(|f| f as u16).collect::<Box<[u16]>>();
+                    // let quad_indices = (quads_len..quads_len + quad_block_model.quads_per_face.len()).map(|f| f as u16).collect::<Box<[u16]>>();
                     let quad_index_block_model = QuadIndexBlockModel {
-                        quad_indices,
-                        texture_indices: quad_block_model.texture_indices
+                        quad_indices_per_face,
+                        texture_indices_per_face: quad_block_model.texture_indices_per_face,
+                        quad_culling_per_face: quad_block_model.quad_culling_per_face,
                     };
 
                     vacant.insert(quad_index_block_model.clone());
                     let block_model_variant = BlockModelVariant {
                         applied_model: variant.applied_model,
-                        quad_indices: quad_index_block_model.quad_indices,
-                        texture_indices: quad_index_block_model.texture_indices,
+                        quad_indices_per_face: quad_index_block_model.quad_indices_per_face,
+                        texture_indices_per_face: quad_index_block_model.texture_indices_per_face,
+                        quad_culling_per_face: quad_index_block_model.quad_culling_per_face,
                         required_state: variant.required_state,
                         standalone: variant.standalone,
                         rotation: variant.rotation,
@@ -104,11 +113,13 @@ pub fn load_blocks<T: Into<std::path::PathBuf>>(path: T, baked_block_models: &Ba
 pub fn create_rotated_quad_model(mut baked_model: QuadBlockModel, rotation: Vector3<f32>) -> QuadBlockModel {
     let euler_angles = cgmath::Euler::new(Deg(rotation.x), Deg(rotation.y), Deg(rotation.z));
     let rotation_matrix = cgmath::Basis3::from(euler_angles);
-    for quad in baked_model.quads.iter_mut() {
-        for position in quad.vertex_positions.iter_mut() {
-            *position = rotation_matrix.rotate_vector(*position);
+    for quads in baked_model.quads_per_face.iter_mut() {
+        for quad in quads {
+            for position in quad.vertex_positions.iter_mut() {
+                *position = rotation_matrix.rotate_vector(*position);
+            }
+            quad.normal = rotation_matrix.rotate_vector(quad.normal);
         }
-        quad.normal = rotation_matrix.rotate_vector(quad.normal);
     }
 
     baked_model

@@ -6,7 +6,7 @@ use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, Block}, worl
 
 use super::CHUNK_SIZE;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ExpandedChunkPart {
     pub block_pallet_ids: [BlockPalletItemId; Self::SIZE * Self::SIZE * Self::SIZE],
     pub block_pallet: BlockPallet
@@ -53,7 +53,7 @@ impl ExpandedChunkPart {
     }
 
     pub fn new(chunk_map: &ChunkMap, chunk_pos: Vector2<i32>, chunk_part_index: usize) -> Option<Self> {
-        let Some(chunk) = chunk_map.get(chunk_pos) else { return None; };
+        let Some(chunk) = chunk_map.get(chunk_pos).map(|f| f.lock().unwrap()) else { return None; };
         let Some(chunk_part) = chunk.parts.get(chunk_part_index) else { return None; };
 
         let mut expanded_chunk_part = Self {
@@ -80,7 +80,7 @@ impl ExpandedChunkPart {
         
 
         // +x
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x + 1, chunk_pos.y)) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x + 1, chunk_pos.y)).map(|f| f.lock().unwrap()) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE {
@@ -108,7 +108,7 @@ impl ExpandedChunkPart {
         }
 
         // -x
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x - 1, chunk_pos.y)) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x - 1, chunk_pos.y)).map(|f| f.lock().unwrap()) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE {
@@ -136,7 +136,7 @@ impl ExpandedChunkPart {
         }
 
         // +z
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x, chunk_pos.y + 1)) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x, chunk_pos.y + 1)).map(|f| f.lock().unwrap()) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE {
@@ -164,7 +164,7 @@ impl ExpandedChunkPart {
         }
 
         // -z
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x, chunk_pos.y - 1)) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x, chunk_pos.y - 1)).map(|f| f.lock().unwrap()) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE {
@@ -214,7 +214,7 @@ impl ExpandedChunkPart {
         }
 
         // corner +x +z
-        if let Some(chunk) = chunk_map.get(chunk_pos.map(|f| f + 1)) {
+        if let Some(chunk) = chunk_map.get(chunk_pos.map(|f| f + 1)).map(|f| f.lock().unwrap()) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE {
                 let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, y, 0));
@@ -235,7 +235,7 @@ impl ExpandedChunkPart {
         }
 
         // corner -x +z
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x - 1, chunk_pos.y + 1)) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x - 1, chunk_pos.y + 1)).map(|f| f.lock().unwrap()) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE {
                 let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, y, 0));
@@ -256,7 +256,7 @@ impl ExpandedChunkPart {
         }
 
         // corner +x -z
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x + 1, chunk_pos.y - 1)) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x + 1, chunk_pos.y - 1)).map(|f| f.lock().unwrap()) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE {
                 let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, y, CHUNK_SIZE - 1));
@@ -277,7 +277,7 @@ impl ExpandedChunkPart {
         }
 
         // corner -x -z
-        if let Some(chunk) = chunk_map.get(chunk_pos.map(|f| f - 1)) {
+        if let Some(chunk) = chunk_map.get(chunk_pos.map(|f| f - 1)).map(|f| f.lock().unwrap()) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE {
                 let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, y, CHUNK_SIZE - 1));

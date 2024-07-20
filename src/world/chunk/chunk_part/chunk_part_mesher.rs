@@ -6,14 +6,8 @@ use crate::{block::{light::LightLevel, model::{Face, FacePacked}, FaceDirection,
 
 use super::{expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE};
 
-pub const MESH_THREADS: usize = 8;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ThreadStatus {
-    Working,
-    Idle
-}
-
+#[derive(Debug)]
 pub struct MeshingInput {
     pub expanded_chunk_part: Box<ExpandedChunkPart>,
     pub chunk_position: Vector2<i32>,
@@ -28,29 +22,14 @@ pub struct MeshingOutput {
 }
 
 pub struct ChunkPartMesher {
-    senders: Vec<Sender<MeshingInput>>,
-    receivers: Vec<Receiver<MeshingOutput>>,
-    threads_status: Vec<ThreadStatus>,
-    thread_pool: rayon::ThreadPool,
+    thread_work_dispatcher: crate::thread_work_dispatcher::ThreadWorkDispatcher<MeshingInput, MeshingOutput>
 }
 
 impl ChunkPartMesher {
-    pub fn new(thread_num: usize) -> Self {
-        let mut senders = vec![];
-        let mut receivers = vec![];
-        let mut threads_status = vec![];
-        let thread_pool = rayon::ThreadPoolBuilder::new().num_threads(thread_num).build().unwrap();
+    pub fn new(num_threads: usize) -> Self {
+        let x = crate::thread_work_dispatcher::ThreadWorkDispatcher::new(num_threads, Self::run_mesher);
 
-        for _ in 0..thread_num {
-            let (input_sender, input_receiver) = channel();
-            let (output_sender, output_receiver) = channel();
-            thread_pool.spawn(move || { Self::run_mesher(input_receiver, output_sender) });
-            senders.push(input_sender);
-            receivers.push(output_receiver);
-            threads_status.push(ThreadStatus::Idle);
-        }
-
-        Self { senders, receivers, threads_status, thread_pool }
+        Self { thread_work_dispatcher: x }
     }
 
     fn run_mesher(receiver: Receiver<MeshingInput>, sender: Sender<MeshingOutput>) {
@@ -134,42 +113,23 @@ impl ChunkPartMesher {
         }
     }
 
-    #[inline]
-    fn get_idle_thread_index(&self) -> Option<usize> {
-        self.threads_status.iter().position(|p| *p == ThreadStatus::Idle)
-    }
 
+    #[inline]
     pub fn collect_meshing_outputs(&mut self) -> Box<[MeshingOutput]> {
-        let mut meshing_outputs = vec![];
-        for (i, receiver) in self.receivers.iter().enumerate() {
-            let mut received = false;
-            for meshing_output in receiver.try_iter() {
-                received = true;
-                meshing_outputs.push(meshing_output);
-            }
-
-            if received {
-                self.threads_status[i] = ThreadStatus::Idle;
-            }
-        }
-
-        meshing_outputs.into_boxed_slice()
+        self.thread_work_dispatcher.collect_outputs()
     }
 
     #[inline]
-    pub fn mesh_chunk_part(&mut self, expanded_chunk_part: ExpandedChunkPart, chunk_position: Vector2<i32>, chunk_part_index: usize) -> Option<()> {
-        self.get_idle_thread_index().map(|i| {
-            self.threads_status[i] = ThreadStatus::Working;
-            self.senders[i].send(MeshingInput {
-                expanded_chunk_part: Box::new(expanded_chunk_part),
-                chunk_position,
-                chunk_part_index
-            }).unwrap();
-        })   
+    pub fn mesh_chunk_part(&mut self, expanded_chunk_part: ExpandedChunkPart, chunk_position: Vector2<i32>, chunk_part_index: usize) -> Result<(), crate::thread_work_dispatcher::ThreadWorkDispatcherError<MeshingInput>> {
+        self.thread_work_dispatcher.dispatch_work(MeshingInput {
+            expanded_chunk_part: Box::new(expanded_chunk_part),
+            chunk_position,
+            chunk_part_index
+        })
     }
 
     #[inline]
     pub fn idle_threads(&self) -> usize {
-        self.threads_status.iter().filter(|p| **p == ThreadStatus::Idle).count()
+        self.thread_work_dispatcher.idle_threads()
     }
 }

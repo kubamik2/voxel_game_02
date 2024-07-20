@@ -2,8 +2,9 @@ use winit::{
     event_loop::EventLoop, window::{Window, WindowBuilder}
 };
 use std::sync::Arc;
-use crate::setttings::Settings;
+use crate::settings::Settings;
 
+#[derive(Clone)]
 pub struct GameWindow {
     window: Arc<Window>
 }

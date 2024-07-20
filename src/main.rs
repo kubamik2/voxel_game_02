@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 mod state;
 mod game_window;
-mod setttings;
+mod settings;
 mod camera;
 mod relative_vector;
 mod world;
@@ -13,6 +13,9 @@ mod block;
 mod texture;
 mod collision;
 mod interval;
+mod render_thread;
+mod renderable;
+mod thread_work_dispatcher;
 
 lazy_static::lazy_static! {
     pub static ref BASE_MODELS: block::asset_loader::BaseQuadBlockModels = block::asset_loader::load_models("./assets/models").unwrap();

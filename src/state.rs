@@ -1,42 +1,45 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{collections::VecDeque, sync::{Arc, Condvar, Mutex}};
 
 use cgmath::{Point3, Vector2, Vector3};
 use wgpu::{util::DeviceExt, Device, Features, Queue};
 use winit::{event::{DeviceEvent, Event, WindowEvent}, event_loop::EventLoop};
 
-use crate::{block::quad_buffer::QuadBuffer, game_window::GameWindow, setttings::Settings, texture::Texture, world::PARTS_PER_CHUNK, BLOCK_MODEL_VARIANTS, QUADS};
+use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, interval::{Interval, IntervalThread}, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MODEL_VARIANTS, QUADS};
 
-const S: usize = 3;
+const S: usize = 1;
 
-pub struct State<'a> {
+pub struct State {
     game_window: GameWindow,
+
     settings: Settings,
     settings_last_modified: std::time::SystemTime,
-    surface: wgpu::Surface<'a>,
+
     device: Arc<Device>,
     queue: Arc<Queue>,
+    surface: Arc<wgpu::Surface<'static>>,
+
     surface_config: wgpu::SurfaceConfiguration,
     aspect_ratio: f32,
     settings_path: std::path::PathBuf,
     pipeline: wgpu::RenderPipeline,
+
     quad_buffer: QuadBuffer,
-    model_buffer_bind_group: wgpu::BindGroup,
-    view_projection_uniform: crate::camera::ViewProjectionUniform,
-    view_projection_bind_group: wgpu::BindGroup,
-    view_projection_buffer: wgpu::Buffer,
+
+    view_projection: crate::camera::ViewProjection,
+
     camera: crate::camera::CameraTemp,
+
     index_buffer: wgpu::Buffer,
-    texture_atlas: Texture,
-    texture_atlas_bind_group: wgpu::BindGroup,
+
+    texture_atlas: TextureAtlas,
     depth_texture: Texture,
 
-    mesher: crate::world::chunk::chunk_part::chunk_part_mesher::ChunkPartMesher,
-    chunk_map: crate::world::chunk::chunk_map::ChunkMap,
-    mesh_queue: VecDeque<(Vector2<i32>, usize)>,
+    chunk_manager: ChunkManager,
+
     now: std::time::Instant,
 }
 
-impl<'a> State<'a> {
+impl State {
     pub async fn new(settings_path: &std::path::Path) -> anyhow::Result<(Self, EventLoop<()>)> {
         let settings = Settings::from_file(settings_path)?;
         let settings_last_modified = std::fs::metadata(settings_path)?.modified()?;
@@ -87,24 +90,6 @@ impl<'a> State<'a> {
         surface.configure(&device, &surface_config);
         let aspect_ratio = surface_config.width as f32 / surface_config.height as f32;
         
-
-        
-
-        let model_buffer_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    count: Some(std::num::NonZeroU32::new(1).unwrap()),
-                    ty: wgpu::BindingType::Buffer {
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                        ty: wgpu::BufferBindingType::Storage { read_only: true }
-                    },
-                    visibility: wgpu::ShaderStages::VERTEX
-                }
-            ]
-        });
         let quad_buffer = QuadBuffer::new(&device, &QUADS);
 
 
@@ -119,64 +104,20 @@ impl<'a> State<'a> {
             contents: bytemuck::cast_slice(&indices)
         });
         
-        let quad_buffer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &model_buffer_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(quad_buffer.buffer().as_entire_buffer_binding())
-                }
-            ]
-        });
-
         let camera = crate::camera::CameraTemp::new();
-        let mut view_projection_uniform = crate::camera::ViewProjectionUniform::new();
-        view_projection_uniform.update(&camera, aspect_ratio);
+        let mut view_projection = crate::camera::ViewProjection::new(&device);
+        view_projection.update(&camera, aspect_ratio);
 
-        let view_projection_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            contents: bytemuck::cast_slice(&[view_projection_uniform])
-        });
-
-        let view_projection_bind_group_layout = crate::camera::ViewProjectionUniform::create_bind_group_layout(&device);
-
-        let view_projection_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &view_projection_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(view_projection_buffer.as_entire_buffer_binding())
-                }
-            ]
-        });
-        let texture_atlas = crate::texture::Texture::from_bytes(&device, &queue, include_bytes!("../assets/atlases/block_01.png"), "texture_atlas")?;
-        let texture_atlas_bind_group_layout = Texture::texture_atlas_bind_group_layout(&device);
-        let texture_atlas_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("texture_atlas_bind_group"),
-            layout: &texture_atlas_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_atlas.view)
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&texture_atlas.sampler)
-                }
-            ]
-        });
+        let texture_atlas = TextureAtlas::new("./assets/atlases/block_01.png", &device, &queue);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[
-                &view_projection_bind_group_layout,
-                crate::world::chunk::dynamic_chunk_model_mesh::DynamicChunkModelMesh::get_or_init_face_buffer_bind_group_layout(&device),
-                &model_buffer_bind_group_layout,
-                &texture_atlas_bind_group_layout,
-                crate::world::chunk::ChunkTranslation::bind_group_layout(&device),
+                crate::camera::ViewProjection::get_or_init_bind_group_layout(&device),
+                crate::world::chunk::dynamic_chunk_mesh::DynamicChunkMesh::get_or_init_face_buffer_bind_group_layout(&device),
+                QuadBuffer::get_or_init_bind_group_layout(&device),
+                TextureAtlas::get_or_init_bind_group_layout(&device),
+                crate::world::chunk::ChunkTranslation::get_or_init_bind_group_layout(&device),
             ],
             push_constant_ranges: &[],
         });
@@ -232,58 +173,33 @@ impl<'a> State<'a> {
         });
         
         let depth_texture = Texture::create_depth_texture(&device, &surface_config, "depth_texture");
-
-        let mut mesher = crate::world::chunk::chunk_part::chunk_part_mesher::ChunkPartMesher::new(12);
-        let mut chunk_map = crate::world::chunk::chunk_map::ChunkMap::new();
-        let mut mesh_queue = VecDeque::new();
-        for y in 0..S {
-            for x in 0..S {
-                let chunk = crate::world::chunk::Chunk {
-                    mesh: crate::world::chunk::dynamic_chunk_model_mesh::DynamicChunkModelMesh::new(&device),
-                    parts: std::array::from_fn(|_| crate::world::chunk::chunk_part::ChunkPart::new_cobblesone()),
-                    position: Vector2::new(x as i32, y as i32),
-                    translation: crate::world::chunk::ChunkTranslation::new(&device, Vector2::new(x as i32, y as i32))
-                };
-                let pos = chunk.position;
-                chunk_map.insert(chunk.position, chunk);
-                let chunk = chunk_map.get_mut(pos).unwrap();
-                for i in 0..12 {
-                    let part = &mut chunk.parts[i];
-                    part.meshing_scheduled = true;
-                    mesh_queue.push_back((pos, i));
-                }
-            }
-        }
-
+        let device = Arc::new(device);
+        let queue = Arc::new(queue);
+        
+        let chunk_manager = ChunkManager::new(device.clone(), queue.clone(), 10, 12, 12);
 
         Ok((
             Self {
                 game_window,
                 settings,
                 settings_last_modified,
-                device: Arc::new(device),
-                queue: Arc::new(queue),
-                surface,
+                device,
+                queue,
+                surface: Arc::new(surface),
                 surface_config,
                 aspect_ratio,
                 settings_path: settings_path.to_owned(),
                 pipeline,
                 quad_buffer,
-                model_buffer_bind_group: quad_buffer_bind_group,
-                view_projection_uniform,
-                view_projection_bind_group,
-                view_projection_buffer,
+                view_projection,
                 camera,
                 index_buffer,
                 texture_atlas,
-                texture_atlas_bind_group,
                 depth_texture,
-                mesher,
-                chunk_map,
-                mesh_queue,
-                now: std::time::Instant::now()
+                chunk_manager,
+                now: std::time::Instant::now(),
             }, 
-            event_loop
+            event_loop,
         ))
     }
 
@@ -304,10 +220,20 @@ impl<'a> State<'a> {
         self.surface_config.width
     }
 
+    fn update_60hz(&mut self) {
+
+    }
+
     pub fn run<T: Into<std::path::PathBuf>>(settings_path: T) -> anyhow::Result<()> {
         let settings_path = settings_path.into();
         let (mut state, event_loop) = pollster::block_on(Self::new(&settings_path))?;
+        
         let mut last_render_instant = std::time::Instant::now();
+
+        let render_thread = RenderThread::new(state.device.clone(), state.queue.clone(), state.surface_config.clone());
+        let rendering_condvar_pair = render_thread.rendering_condvar_pair.clone();
+        let mut interval_300hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 300.0));
+        let mut interval_60hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 60.0));
 
         event_loop.run(move |event, elwt| {
             elwt.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -322,7 +248,19 @@ impl<'a> State<'a> {
                     }
                 }
             }
- 
+
+            if render_thread.work_done_receiver.try_recv().is_ok() {
+                state.game_window.window().request_redraw();
+            }
+
+            interval_300hz.tick(|| {
+                state.chunk_manager.update();
+            });
+
+            interval_60hz.tick(|| {
+                state.chunk_manager.insert_chunks_around_player(Vector2::new(0, 0));
+            });
+
             match event {
                 Event::WindowEvent { window_id, event } => {
                     match event {
@@ -333,9 +271,17 @@ impl<'a> State<'a> {
                             if state.game_window.window().has_focus() {
                                 state.game_window.window().set_cursor_position(winit::dpi::PhysicalPosition::new(state.width() / 2, state.height() / 2)).unwrap();
                             }
+                            state.camera.update();
+                            render_thread.update_view_projection(&state.camera, state.aspect_ratio);
+                            state.chunk_manager.collect_meshing_outputs();
+                            let meshes = state.chunk_manager.get_ready_meshes();
+                            if meshes.len() == (2 * state.chunk_manager.render_distance() as usize - 3) * (2 * state.chunk_manager.render_distance() as usize - 3) {
+                                dbg!(state.now.elapsed());
+                            }
+                            // state.chunk_manager.print_chunk_generation_stages();
+                            render_thread.render(RenderArgs { surface: state.surface.clone(), game_window: state.game_window.clone(), aspect: state.aspect_ratio, meshes });
                             // println!("{:.1?} fps", 1.0 / last_render_instant.elapsed().as_secs_f64());
                             last_render_instant = std::time::Instant::now();
-                            state.render();
                         }
                         WindowEvent::Resized(new_size) => {
                             state.resize_window(new_size);
@@ -352,84 +298,10 @@ impl<'a> State<'a> {
                     if let DeviceEvent::MouseMotion { delta: (delta_x, delta_y) } = event {
                         state.camera.handle_mouse_movement(delta_x as f32, delta_y as f32);
                     }
-                }
-                Event::AboutToWait => {
-                    state.game_window.window().request_redraw();
-                }
+                },
                 _ => ()
             }
         })?;
         Ok(())
-    }
-
-    pub fn update_mesher(&mut self) {
-
-    }
-
-    pub fn render(&mut self) {
-        let output = self.surface.get_current_texture().unwrap();
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render_encoder")} );
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("model_translucent_render_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store
-                    }
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
-                    stencil_ops: None,
-                    view: &self.depth_texture.view
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None
-            });
-            
-            for meshing_data in self.mesher.collect_meshing_outputs() {
-                let chunk = self.chunk_map.get_mut(meshing_data.chunk_position).unwrap();
-                chunk.insert_meshed_chunk_part(&self.device, &self.queue, meshing_data, &mut self.mesh_queue);
-            }
-            
-            for _ in 0..self.mesher.idle_threads() {
-                if self.mesh_queue.len() == 0 { break; }
-                let (chunk_position, chunk_part_index) = self.mesh_queue.pop_front().unwrap();
-                let expanded_chunk_part = crate::world::chunk::chunk_part::expanded_chunk_part::ExpandedChunkPart::new(&self.chunk_map, chunk_position, chunk_part_index).unwrap();
-                self.mesher.mesh_chunk_part(expanded_chunk_part, chunk_position, chunk_part_index).unwrap();
-            }
-
-
-            render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, &self.view_projection_bind_group, &[]);
-            render_pass.set_bind_group(2, &self.model_buffer_bind_group, &[]);
-            render_pass.set_bind_group(3, &self.texture_atlas_bind_group, &[]);
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            for y in 0..S {
-                for x in 0..S {
-                    let chunk_pos = Vector2::new(x as i32, y as i32);
-                    let chunk = self.chunk_map.get(chunk_pos).unwrap();
-                    if !chunk.parts.iter().all(|f| f.meshed) { continue; }
-
-                    render_pass.set_bind_group(1, &chunk.mesh.face_buffer_bind_group, &[]);
-                    render_pass.set_bind_group(4, &chunk.translation.bind_group, &[]);
-
-                    render_pass.multi_draw_indexed_indirect(&chunk.mesh.indirect_buffer, 0, PARTS_PER_CHUNK as u32);
-                }
-            }
-        }
-
-        self.queue.submit(std::iter::once(encoder.finish()));
-        self.game_window.window().pre_present_notify();
-        output.present();
-
-
-        self.view_projection_uniform.update(&self.camera, self.aspect_ratio);
-
-        self.queue.write_buffer(&self.view_projection_buffer, 0, bytemuck::cast_slice(&[self.view_projection_uniform]));
-        self.camera.update();
     }
 }

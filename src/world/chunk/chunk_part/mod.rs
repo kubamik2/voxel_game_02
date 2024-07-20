@@ -11,26 +11,20 @@ pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_SIZE_F32: f32 = CHUNK_SIZE as f32;
 pub const CHUNK_SIZE_F64: f64 = CHUNK_SIZE as f64;
 
-pub enum GenerationStage {
-    Terrain,
-    Decoration,
-}
+
 
 pub struct ChunkPart {
     pub block_pallet: BlockPallet,
     pub block_layers: BlockLayers,
-    pub generation_stage: GenerationStage,
-    pub meshing_scheduled: bool,
-    pub meshed: bool,
 }
 
 impl ChunkPart {
-    pub fn new_cobblesone() -> Self {
+    pub fn new_random() -> Self {
         let block_pallet = BlockPallet::new_air();
         let block_layers = BlockLayers::new_uncompressed();
-        let mut chunk = Self { block_layers, block_pallet, generation_stage: GenerationStage::Terrain, meshing_scheduled: false, meshed: false };
-        let cobblestone_id = chunk.block_pallet.insert_count(BLOCK_MAP.get("cobblestone").unwrap().clone().into(), 0);
-        let dirt_id = chunk.block_pallet.insert_count(BLOCK_MAP.get("dirt").unwrap().clone().into(), 0);
+        let mut chunk_part = Self { block_layers, block_pallet };
+        let cobblestone_id = chunk_part.block_pallet.insert_count(BLOCK_MAP.get("cobblestone").unwrap().clone().into(), 0);
+        let dirt_id = chunk_part.block_pallet.insert_count(BLOCK_MAP.get("dirt").unwrap().clone().into(), 0);
 
         let mut rng = rand::thread_rng();
         for y in 0..CHUNK_SIZE {
@@ -38,19 +32,25 @@ impl ChunkPart {
                 for x in 0..CHUNK_SIZE {
                     if rng.gen_bool(0.5) { continue; }
                     if rng.gen_bool(0.5) {
-                        chunk.set_block_pallet_id((x, y, z), cobblestone_id);
+                        chunk_part.set_block_pallet_id((x, y, z), cobblestone_id);
                     } else {
-                        chunk.set_block_pallet_id((x, y, z), dirt_id);
+                        chunk_part.set_block_pallet_id((x, y, z), dirt_id);
                     }
                 }
             }
         }
-        chunk.set_block_pallet_id((0, 0, 0), 0);
+        chunk_part.set_block_pallet_id((0, 0, 0), 0);
 
-        chunk.block_pallet.clean_up();
-        chunk.block_layers.compress();
+        chunk_part.block_pallet.clean_up();
+        chunk_part.block_layers.compress();
 
-        chunk
+        chunk_part
+    }
+
+    pub fn new_air() -> Self {
+        let block_pallet = BlockPallet::new_air();
+        let block_layers = BlockLayers::new_uncompressed();
+        Self { block_layers, block_pallet }
     }
 
     pub fn set_block(&mut self, index: (usize, usize, usize), block: Block) {

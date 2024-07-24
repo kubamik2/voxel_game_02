@@ -123,7 +123,7 @@ impl BlockLayers {
 impl Index<Vector3<usize>> for BlockLayers {
     type Output = BlockPalletItemId;
     fn index(&self, index: Vector3<usize>) -> &Self::Output {
-        let layer = &self.0[index.x];
+        let layer = &self.0[index.y];
         match layer {
             BlockLayer::Uncompressed(blocks) => &blocks[index.x + index.z * CHUNK_SIZE],
             BlockLayer::Compressed(block) => block,

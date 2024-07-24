@@ -4,7 +4,7 @@ use cgmath::{Point3, Vector2, Vector3};
 use wgpu::{util::DeviceExt, Device, Features, Queue};
 use winit::{event::{DeviceEvent, Event, WindowEvent}, event_loop::EventLoop};
 
-use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, interval::{Interval, IntervalThread}, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MODEL_VARIANTS, QUADS};
+use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, interval::{Interval, IntervalThread}, relative_vector::RelVec3, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MODEL_VARIANTS, QUADS};
 
 pub struct State {
     game_window: GameWindow,
@@ -123,10 +123,6 @@ impl State {
         self.surface_config.width
     }
 
-    fn update_60hz(&mut self) {
-
-    }
-
     pub fn run<T: Into<std::path::PathBuf>>(settings_path: T) -> anyhow::Result<()> {
         let settings_path = settings_path.into();
         let (mut state, event_loop) = pollster::block_on(Self::new(&settings_path))?;
@@ -136,6 +132,7 @@ impl State {
         let render_thread = RenderThread::new(state.device.clone(), state.queue.clone(), state.surface_config.clone());
         let mut interval_300hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 300.0));
         let mut interval_60hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 60.0));
+        let mut interval_2hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 2.0));
 
         event_loop.run(move |event, elwt| {
             elwt.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -162,6 +159,15 @@ impl State {
             interval_60hz.tick(|| {
                 state.chunk_manager.insert_chunks_around_player(Vector2::new(0, 0));
             });
+
+            // interval_2hz.tick(|| {
+            //     let rel_vec = RelVec3::from(Vector3::new(state.camera.camera_position().x, state.camera.camera_position().y, state.camera.camera_position().z));
+            //     let local_pos = rel_vec.local_pos().map(|f| f.floor() as usize);
+            //     let Some(chunk) = state.chunk_manager.chunk_map.get(rel_vec.chunk_pos().xz()) else { return; };
+            //     if rel_vec.chunk_pos().y < 0 || rel_vec.chunk_pos().y >= PARTS_PER_CHUNK as i32 { return; }
+
+            //     println!("chunk: {:?},  local: {:?},  light: {}", rel_vec.chunk_pos(), local_pos, chunk.parts[rel_vec.chunk_pos().y as usize].light_level_layers.get_light_level(local_pos).get_sky());
+            // });
 
             match event {
                 Event::WindowEvent { window_id, event } => {

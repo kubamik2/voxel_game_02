@@ -171,7 +171,7 @@ impl CameraTemp {
 
         let mut horizontal_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
         let mut vertical_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
-        let speed = 0.4;
+        let speed = 0.1;
 
         if self.is_forward_pressed {
             horizontal_movement_vector += forward;
@@ -205,7 +205,7 @@ impl CameraTemp {
         }
 
         if vertical_movement_vector.magnitude2() > 0.0 {
-            self.position += vertical_movement_vector * speed;
+            self.position += vertical_movement_vector * speed * 8.0;
         }
     }
 

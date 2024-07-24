@@ -10,7 +10,6 @@ pub mod quad_buffer;
 
 pub const FACE_DIRECTIONS_NUM: usize = std::mem::variant_count::<FaceDirection>();
 pub type BlockId = u16;
-static LAST_ID: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
@@ -80,19 +79,46 @@ impl Into<Block> for  BlockInformation {
 
 #[derive(serde::Deserialize, PartialEq, Clone, Debug)]
 pub struct Properties {
+    #[serde(default)]
     pub alpha_mode: AlphaMode,
+
+    #[serde(default = "bool_false")]
     pub targetable: bool,
+
+    #[serde(default = "bool_false")]
     pub replaceable: bool,
-    pub collideable: bool
+
+    #[serde(default = "bool_true")]
+    pub collideable: bool,
+
+    #[serde(default = "bool_true")]
+    pub obstructs_light: bool,
+
+    #[serde(default = "u8_0")]
+    pub emmited_light: u8,
+}
+
+const fn bool_true() -> bool {
+    true
+}
+
+const fn bool_false() -> bool {
+    false
+}
+
+const fn u8_0() -> u8 {
+    0
 }
 
 impl Default for Properties {
     fn default() -> Self {
         Self {
-            alpha_mode: AlphaMode::Opaque,
-            collideable: true,
+            alpha_mode: AlphaMode::default(),
+            targetable: true,
             replaceable: false,
-            targetable: true
+            collideable: true,
+            obstructs_light: true,
+            emmited_light: 0,
         }
     }
 }
@@ -102,6 +128,12 @@ pub enum AlphaMode {
     Opaque,
     Transparent,
     Translucent
+}
+
+impl Default for AlphaMode {
+    fn default() -> Self {
+        Self::Opaque
+    }
 }
 
 impl AlphaMode {

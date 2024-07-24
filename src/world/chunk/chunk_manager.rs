@@ -65,6 +65,7 @@ impl ChunkManager {
                 GenerationStage::Shape => 'S',
                 GenerationStage::Terrain => 'T',
                 GenerationStage::Decoration => 'D',
+                GenerationStage::Light => 'L',
             };
         }
         let mut string = String::new();

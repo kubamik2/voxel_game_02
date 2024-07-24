@@ -5,7 +5,7 @@ use std::ops::Index;
 
 use cgmath::Vector3;
 
-use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::LightLevel, Block}, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP};
+use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::{LightLevel, LightNode}, Block}, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP};
 
 pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_SIZE_F32: f32 = CHUNK_SIZE as f32;
@@ -17,6 +17,7 @@ pub struct ChunkPart {
     pub block_pallet: BlockPallet,
     pub block_layers: BlockLayers,
     pub light_level_layers: LightLevelLayers,
+    pub light_emitters: Vec<LightNode>,
 }
 
 impl ChunkPart {
@@ -24,13 +25,16 @@ impl ChunkPart {
         let block_pallet = BlockPallet::new_air();
         let block_layers = BlockLayers::new_uncompressed();
         let light_level_layers = LightLevelLayers::new_uncompressed();
-        Self { block_layers, block_pallet, light_level_layers }
+        Self { block_layers, block_pallet, light_level_layers, light_emitters: vec![] }
+    }
+
+    fn position_in_bounds(local_position: Vector3<usize>) -> bool {
+        local_position.x < CHUNK_SIZE && local_position.y < CHUNK_SIZE && local_position.z < CHUNK_SIZE
     }
 
     pub fn set_block(&mut self, local_position: Vector3<usize>, block: Block) {
-        let old_block_pallet_id = self.block_layers[local_position];
+        let Some(old_block_pallet_id) = self.block_layers.get_block_pallet_id(local_position) else { return; };
         let block_pallet_item = self.block_pallet.get_mut(&old_block_pallet_id).unwrap();
-        // assert!(block_pallet_item.count > 0);
         block_pallet_item.count += 1;
 
         let block_pallet_id = if let Some((id, item)) = self.block_pallet.find_item_mut(&block) {
@@ -68,10 +72,66 @@ impl ChunkPart {
         self.block_layers.set_block_pallet_id(local_position, block_pallet_id);
     }
 
-    pub fn get_block(&self, local_position: Vector3<usize>) -> &Block {
-        let block_pallet_id = self.block_layers[local_position];
-        &self.block_pallet.get(&block_pallet_id).unwrap().block
+    pub fn get_block(&self, local_position: Vector3<usize>) -> Option<&Block> {
+        let Some(block_pallet_id) = self.block_layers.get_block_pallet_id(local_position) else { return None; };
+        Some(&self.block_pallet.get(block_pallet_id).unwrap().block)
     }
+
+    // pub fn clear_light(&mut self) {
+    //     self.light_level_layers = LightLevelLayers::new_uncompressed();
+    // }
+
+    // #[inline]
+    // pub fn propagate_block_light(&mut self, light_emmiters: &[LightNode]) {
+    //     let max_block_pallet_id = self.block_pallet.max_key().unwrap();
+    //     let mut obstructs_light_cache = vec![None; max_block_pallet_id as usize + 1];
+
+    //     for (id, item) in self.block_pallet.iter() {
+    //         let obstructs_light = BLOCK_MAP.get(item.block.name()).unwrap().properties().obstructs_light;
+    //         obstructs_light_cache[id as usize] = Some(obstructs_light);
+    //     }
+
+    //     let mut light_node_queue = std::collections::VecDeque::with_capacity(self.light_emmiters.len());
+    //     light_node_queue.extend(light_emmiters.iter().cloned());
+
+    //     while let Some(light_node) = light_node_queue.pop_front() {
+    //         let Some(block_pallet_id) = self.block_layers.get_block_pallet_id(light_node.position).cloned() else { continue; };
+    //         let obstructs_light = obstructs_light_cache[block_pallet_id as usize].expect("propagate_block_light obstructs_light id not cached");
+    //         if obstructs_light { continue; }
+
+    //         let mut current_light_level = *self.light_level_layers.get_light_level(light_node.position);
+    //         if light_node.level <= current_light_level.get_block() { continue; }
+
+    //         current_light_level.set_block(light_node.level);
+    //         self.light_level_layers.set_light_level(light_node.position, current_light_level);
+    //         if light_node.level == 1 { continue; }
+    //         let new_level = light_node.level - 1;
+
+    //         if light_node.position.x < CHUNK_SIZE - 1 {
+    //             light_node_queue.push_back(LightNode::new(light_node.position + Vector3::unit_x(), new_level));
+    //         }
+
+    //         if light_node.position.y < CHUNK_SIZE - 1 {
+    //             light_node_queue.push_back(LightNode::new(light_node.position + Vector3::unit_y(), new_level));
+    //         }
+
+    //         if light_node.position.z < CHUNK_SIZE - 1 {
+    //             light_node_queue.push_back(LightNode::new(light_node.position + Vector3::unit_z(), new_level));
+    //         }
+
+    //         if light_node.position.x > 0 {
+    //             light_node_queue.push_back(LightNode::new(light_node.position - Vector3::unit_x(), new_level));
+    //         }
+
+    //         if light_node.position.y > 0 {
+    //             light_node_queue.push_back(LightNode::new(light_node.position - Vector3::unit_y(), new_level));
+    //         }
+
+    //         if light_node.position.z > 0 {
+    //             light_node_queue.push_back(LightNode::new(light_node.position - Vector3::unit_z(), new_level));
+    //         }
+    //     }
+    // }
 }
 
 #[derive(Clone)]
@@ -87,6 +147,7 @@ impl BlockLayers {
         Self(std::array::from_fn(|_| BlockLayer::Uncompressed(Box::new([0; Self::LAYER_SIZE]))))
     }
 
+
     #[inline]
     pub fn compress(&mut self) {
         for layer in self.0.iter_mut() {
@@ -101,7 +162,7 @@ impl BlockLayers {
 
     #[inline]
     pub fn set_block_pallet_id(&mut self, local_position: Vector3<usize>, block_pallet_id: BlockPalletItemId) {
-        assert!(local_position.x < CHUNK_SIZE && local_position.y < CHUNK_SIZE && local_position.z < CHUNK_SIZE);
+        if !ChunkPart::position_in_bounds(local_position) { return; }
         let layer = &mut self.0[local_position.y];
         match layer {
             BlockLayer::Uncompressed(block_ids) => {
@@ -117,6 +178,11 @@ impl BlockLayers {
                 *layer = BlockLayer::Uncompressed(raw_block_ids);
             }
         }
+    }
+
+    pub fn get_block_pallet_id(&self, local_position: Vector3<usize>) -> Option<&BlockPalletItemId> {
+        if !ChunkPart::position_in_bounds(local_position) { return None; }
+        Some(&self[local_position])
     }
 }
 
@@ -202,7 +268,7 @@ impl LightLevelLayers {
     }
 
     #[inline]
-    pub fn get_light_level(&self, local_position: Vector3<usize>) -> &LightLevel {
+    pub fn get_light_level(&self, local_position: Vector3<usize>) -> &LightLevel { // TODO should return Option
         assert!(local_position.x < CHUNK_SIZE && local_position.y < CHUNK_SIZE && local_position.z < CHUNK_SIZE);
         let layer = &self.0[local_position.y];
         match layer {
@@ -215,6 +281,7 @@ impl LightLevelLayers {
         }
     }
 }
+
 
 #[derive(Clone)]
 pub enum LightLevelLayer {

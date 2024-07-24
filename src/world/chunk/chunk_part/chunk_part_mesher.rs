@@ -70,26 +70,28 @@ impl ChunkPartMesher {
                                 let texture_indices = &texture_indices_per_face[face_num];
                                 let quad_culling = &quad_culling_per_face[face_num];
 
-                                let adjacent_block_pallet_id = meshing_input.expanded_chunk_part.index_block_pallet_id(((x as i32 + 1 + normal.x) as usize, (y as i32 + 1 + normal.y) as usize, (z as i32 + 1 + normal.z) as usize));
-                                let adjecent_block_info = block_info_cache[*adjacent_block_pallet_id as usize].unwrap();
+                                let adjacent_block_position = ((x as i32 + 1 + normal.x) as usize, (y as i32 + 1 + normal.y) as usize, (z as i32 + 1 + normal.z) as usize);
+                                let adjacent_block_pallet_id = meshing_input.expanded_chunk_part.index_block_pallet_id(adjacent_block_position);
+                                let adjacent_block_info = block_info_cache[*adjacent_block_pallet_id as usize].unwrap();
+                                let adjacent_block_light_level = *meshing_input.expanded_chunk_part.index_light_level(adjacent_block_position);
                                 
                                 let can_cull = {
                                     if block_info.properties().alpha_mode.is_opaque() {
-                                        adjecent_block_info.properties().alpha_mode.is_opaque()
+                                        adjacent_block_info.properties().alpha_mode.is_opaque()
                                     } else {
-                                        if adjecent_block_info.properties().alpha_mode.is_opaque() {
+                                        if adjacent_block_info.properties().alpha_mode.is_opaque() {
                                             true
                                         } else {
-                                            block_info.id() == adjecent_block_info.id()
+                                            block_info.id() == adjacent_block_info.id()
                                         }
                                     } 
                                 };
-
+                                
                                 for (quad_index, texture_index, culling) in itertools::izip!(IntoIterator::into_iter(quad_indices), IntoIterator::into_iter(texture_indices), IntoIterator::into_iter(quad_culling)){
                                     if can_cull && *culling { continue; }
                                     faces.push(Face {
                                         block_position: [x as u8, y as u8, z as u8],
-                                        lighting: [LightLevel::new(0, 0).unwrap(); 4],
+                                        lighting: [adjacent_block_light_level; 4],
                                         texture_index: *texture_index,
                                         quad_index: *quad_index,
                                     }.pack())

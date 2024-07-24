@@ -1,12 +1,16 @@
 {
     "variants": [
         {
-            "applied_model": "cobblestone",
+            "applied_model": "lamp",
             "required_state": [
                 
             ],
             "standalone": true,
             "rotation": [0.0, 0.0, 0.0]
         }
-    ]
+    ],
+    "properties": {
+        "obstructs_light": false,
+        "emmited_light": 15
+    }
 }

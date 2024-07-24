@@ -8,8 +8,5 @@
             "standalone": true,
             "rotation": [0.0, 0.0, 0.0]
         }
-    ],
-    "default_state": {
-
-    }
+    ]
 }

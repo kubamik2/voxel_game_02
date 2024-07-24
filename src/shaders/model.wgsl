@@ -6,6 +6,7 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4f,
     @location(0) uv: vec2f,
     @location(1) texture_index: u32,
+    @location(2) @interpolate(perspective) light: f32
 }
 
 struct ModelQuad {
@@ -53,7 +54,7 @@ fn construct_face(vertex_index: u32) -> Face {
 
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32, @builtin(instance_index) instance_index: u32) -> VertexOutput {
-    let face = construct_face(i);
+    var face = construct_face(i);
     let quad = quad_buffer[face.quad_index];
     
     let i_mod_4 = i % 4u;
@@ -72,6 +73,8 @@ fn vs_main(@builtin(vertex_index) i: u32, @builtin(instance_index) instance_inde
     out.clip_position = camera.view_projection * vec4f(vertex, 1.0);
     out.uv = uv;
     out.texture_index = face.texture_index;
+    out.light = f32(face.lighting[i_mod_4] + 2) / 17.0;
+
     return out;
 }
 
@@ -83,6 +86,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     let texture_coords = vec2u(in.texture_index % 16u, in.texture_index / 16u);
     let base_uv = vec2f(f32(texture_coords.x) * BLOCK_SIZE, f32(texture_coords.y) * BLOCK_SIZE);
     let uv = base_uv + (in.uv * vec2f(BLOCK_SIZE, BLOCK_SIZE));
-    let color = textureSample(t_diffuse, s_diffuse, uv);
+    let color = textureSample(t_diffuse, s_diffuse, uv) * vec4(in.light, in.light, in.light, 1.0);
     return color;
 }

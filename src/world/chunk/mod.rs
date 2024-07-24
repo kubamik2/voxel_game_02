@@ -40,7 +40,7 @@ impl Chunk {
 
         let position_in_chunk_part = position.map(|f| f.rem_euclid(CHUNK_SIZE));
         let part = &self.parts[chunk_part_index];
-        Some(part.get_block(position_in_chunk_part))
+        part.get_block(position_in_chunk_part)
     }
 
     pub fn set_block(&mut self, position: Vector3<usize>, block: Block) {
@@ -51,6 +51,24 @@ impl Chunk {
         let part = &mut self.parts[chunk_part_index];
 
         part.set_block(position_in_chunk.into(), block);
+    }
+
+    pub fn compress_parts(&mut self) {
+        for part in self.parts.iter_mut() {
+            part.block_layers.compress();
+            part.light_level_layers.compress();
+        }
+    }
+
+    pub fn clean_up_parts(&mut self) {
+        for part in self.parts.iter_mut() {
+            part.block_pallet.clean_up();
+        }
+    }
+
+    pub fn maintain_parts(&mut self) {
+        self.compress_parts();
+        self.clean_up_parts();
     }
 }
 static CHUNK_TRANSLATION_BIND_GROUP_LAYOUT: OnceLock<wgpu::BindGroupLayout> = OnceLock::new();

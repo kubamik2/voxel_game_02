@@ -1,7 +1,9 @@
+use cgmath::Vector3;
+
 pub const LIGHT_LEVEL_BITS: u32 = 4;
 pub const LIGHT_LEVEL_MAX_VALUE: u8 = (1 << LIGHT_LEVEL_BITS) - 1;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)] // TODO implement Debug manually
 pub struct LightLevel(u8);
 
 impl LightLevel {
@@ -57,5 +59,19 @@ impl LightLevel {
     #[inline]
     pub fn to_u8(&self) -> u8 {
         self.0
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct LightNode {
+    pub x: i8,
+    pub y: i16,
+    pub z: i8,
+    pub level: u8,
+}
+
+impl LightNode {
+    pub fn new(x: i8, y: i16, z: i8, level: u8) -> Self {
+        Self { x, y, z, level }
     }
 }

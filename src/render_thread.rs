@@ -6,10 +6,7 @@ use crate::{block::quad_buffer::QuadBuffer, camera::{Camera, CameraTemp, ViewPro
 
 pub struct RenderThread {
     event_sender: Arc<Sender<RenderEvent>>,
-    needed_chunk_parts_receiver: Receiver<(Vector2<i32>, usize)>,
     pub work_done_receiver: Receiver<()>,
-    pub rendering_condvar_pair: Arc<(Mutex<bool>, Condvar)>,
-    pub can_render_condvar_pair: Arc<(Mutex<bool>, Condvar)>,
 }
 
 pub enum RenderEvent {
@@ -27,14 +24,9 @@ pub struct RenderArgs {
 impl RenderThread {
     pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration) -> Self {
         let (event_sender, event_receiver) = channel();
-        let (needed_chunk_parts_sender, needed_chunk_parts_receiver) = channel();
         let (work_done_sender, work_done_receiver) = channel();
-        let rendering_condvar_pair = Arc::new((Mutex::new(false), Condvar::new()));
-        let rendering_condvar_pair_clone = rendering_condvar_pair.clone();
-        let can_render_condvar_pair = Arc::new((Mutex::new(false), Condvar::new()));
-        let can_render_condvar_pair_clone = rendering_condvar_pair.clone();
-        rayon::spawn(move || Self::run(event_receiver, needed_chunk_parts_sender, device, queue, surface_config, work_done_sender, rendering_condvar_pair_clone, can_render_condvar_pair_clone));
-        Self { event_sender: Arc::new(event_sender), needed_chunk_parts_receiver, work_done_receiver, rendering_condvar_pair, can_render_condvar_pair }
+        std::thread::spawn(move || Self::run(event_receiver,  device, queue, surface_config, work_done_sender));
+        Self { event_sender: Arc::new(event_sender), work_done_receiver}
     }
 
     pub fn render(&self, render_args: RenderArgs) -> Result<(), std::sync::mpsc::SendError<RenderEvent>> {
@@ -45,8 +37,8 @@ impl RenderThread {
         self.event_sender.send(RenderEvent::UpdateViewProjection(camera.build_view_projection_matrix(aspect)))
     }
 
-    fn run(event_receiver: Receiver<RenderEvent>, needed_chunk_parts_sender: Sender<(Vector2<i32>, usize)>, device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>, rendering_condvar_pair: Arc<(Mutex<bool>, Condvar)>, can_render_condvar_pair: Arc<(Mutex<bool>, Condvar)>) {
-        let mut render_thread = RenderThreadInner::new(device, queue, surface_config, needed_chunk_parts_sender, work_done_sender, rendering_condvar_pair, can_render_condvar_pair);
+    fn run(event_receiver: Receiver<RenderEvent>, device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>) {
+        let mut render_thread = RenderThreadInner::new(device, queue, surface_config, work_done_sender);
         for event in event_receiver.iter() {
             match event {
                 RenderEvent::Render(args) => render_thread.render(args),
@@ -65,14 +57,11 @@ struct RenderThreadInner {
     quad_buffer: QuadBuffer,
     view_projection: ViewProjection,
     render_pipeline: wgpu::RenderPipeline,
-    needed_chunk_parts_sender: Sender<(Vector2<i32>, usize)>,
     work_done_sender: Sender<()>,
-    rendering_condvar_pair: Arc<(Mutex<bool>, Condvar)>,
-    can_render_condvar_pair: Arc<(Mutex<bool>, Condvar)>,
 }
 
 impl RenderThreadInner {
-    fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, needed_chunk_parts_sender: Sender<(Vector2<i32>, usize)>, work_done_sender: Sender<()>, rendering_condvar_pair: Arc<(Mutex<bool>, Condvar)>, can_render_condvar_pair: Arc<(Mutex<bool>, Condvar)>) -> Self {
+    fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>) -> Self {
         let depth_texture = Texture::create_depth_texture(&device, &surface_config, "depth texture");
         let texture_atlas = TextureAtlas::new("./assets/atlases/block_01.png", &device, &queue);
 
@@ -151,17 +140,13 @@ impl RenderThreadInner {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 unclipped_depth: false
             },
+            cache: None,
         });
 
-        Self { device, queue, depth_texture, texture_atlas, index_buffer, quad_buffer, view_projection, render_pipeline, needed_chunk_parts_sender, work_done_sender, rendering_condvar_pair, can_render_condvar_pair }
+        Self { device, queue, depth_texture, texture_atlas, index_buffer, quad_buffer, view_projection, render_pipeline, work_done_sender }
     }
 
     fn render(&mut self, args: RenderArgs) {
-        {
-            let mut is_rendering = self.rendering_condvar_pair.0.lock().unwrap();
-            *is_rendering = true;
-        }
-
         let output = args.surface.get_current_texture().unwrap();
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render_encoder")} );
@@ -172,7 +157,7 @@ impl RenderThreadInner {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(wgpu::Color { r: 123.0 / 255.0, g: 164.0 / 255.0, b: 1.0, a: 1.0 }),
                         store: wgpu::StoreOp::Store
                     }
                 })],
@@ -203,13 +188,6 @@ impl RenderThreadInner {
         self.view_projection.update_buffer(&self.queue);
         
         self.queue.submit(std::iter::once(encoder.finish()));
-
-        let rendering_condvar_pair = self.rendering_condvar_pair.clone();
-        self.queue.on_submitted_work_done(move || {
-            let mut is_rendering = rendering_condvar_pair.0.lock().unwrap();
-            *is_rendering = false;
-            rendering_condvar_pair.1.notify_all();
-        });
 
         args.game_window.window().pre_present_notify();
         output.present();

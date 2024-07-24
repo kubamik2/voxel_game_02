@@ -70,13 +70,14 @@ impl<I: Send + 'static, O: Send + 'static> ThreadWorkDispatcher<I, O> {
         }
     }
     
-    pub fn iter_outputs<'a>(&'a mut self) -> impl Iterator + 'a {
+    pub fn iter_outputs<'a>(&'a mut self) -> impl Iterator<Item = O> + 'a {
         self.receivers
         .iter()
         .enumerate()
-        .map(|(i, f)| (i, f.try_recv()))
+        .map(move |(i, f)| (i, f.try_recv()))
         .map(|(i, f)| f.and_then(|op| {
             self.threads_status[i] = ThreadStatus::Idle; Ok(op)
         }))
+        .filter_map(|f| f.ok())
     }
 }

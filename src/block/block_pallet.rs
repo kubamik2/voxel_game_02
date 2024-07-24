@@ -50,6 +50,10 @@ impl BlockPallet {
 
     #[inline]
     pub fn insert_block(&mut self, block: Block) -> BlockPalletItemId {
+        if let Some(block_pallet_id) = self.get_block_pallet_id(&block) {
+            return block_pallet_id;
+        }
+
         let block_pallet_id = self.get_lowest_free_id();
         let block_pallet_item = BlockPalletItem {
             block,

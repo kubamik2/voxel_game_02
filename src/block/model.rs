@@ -285,10 +285,10 @@ impl Face {
     pub const VERTICES_PER_FACE: usize = 4;
     pub fn pack(&self) -> FacePacked {
         FacePacked(
-            (self.lighting[0].get() as u64) |
-            (self.lighting[1].get() as u64) << (LIGHT_LEVEL_BITS) |
-            (self.lighting[2].get() as u64) << (2 * LIGHT_LEVEL_BITS) |
-            (self.lighting[3].get() as u64) << (3 * LIGHT_LEVEL_BITS) |
+            (self.lighting[0].to_u8() as u64) |
+            (self.lighting[1].to_u8() as u64) << (LIGHT_LEVEL_BITS) |
+            (self.lighting[2].to_u8() as u64) << (2 * LIGHT_LEVEL_BITS) |
+            (self.lighting[3].to_u8() as u64) << (3 * LIGHT_LEVEL_BITS) |
 
             ((self.block_position[0] & 0b11111) as u64) << (4 * LIGHT_LEVEL_BITS) |
             ((self.block_position[1] & 0b11111) as u64) << (4 * LIGHT_LEVEL_BITS + 5) |

@@ -89,7 +89,7 @@ impl ChunkPartMesher {
                                     if can_cull && *culling { continue; }
                                     faces.push(Face {
                                         block_position: [x as u8, y as u8, z as u8],
-                                        lighting: [LightLevel::new(0).unwrap(); 4],
+                                        lighting: [LightLevel::new(0, 0).unwrap(); 4],
                                         texture_index: *texture_index,
                                         quad_index: *quad_index,
                                     }.pack())

@@ -1,12 +1,12 @@
 use std::sync::{Arc, OnceLock};
 
-use cgmath::Vector2;
+use cgmath::{Vector2, Vector3};
 use chunk_generator::GenerationStage;
-use chunk_part::{chunk_part_mesher::MeshingOutput, ChunkPart};
+use chunk_part::{chunk_part_mesher::MeshingOutput, ChunkPart, CHUNK_SIZE};
 use dynamic_chunk_mesh::DynamicChunkMesh;
 use wgpu::util::DeviceExt;
 
-use crate::block::model::FacePacked;
+use crate::block::{model::FacePacked, Block};
 
 use super::PARTS_PER_CHUNK;
 
@@ -16,12 +16,13 @@ pub mod chunk_part;
 pub mod chunk_mesh_map;
 pub mod chunk_manager;
 pub mod chunk_generator;
+pub mod area;
 
+#[derive(Clone)]
 pub struct Chunk {
     pub position: Vector2<i32>,
     pub parts: [ChunkPart; PARTS_PER_CHUNK],
     pub generation_stage: GenerationStage,
-    pub generation_scheduled: bool,
 }
 
 impl Chunk {
@@ -30,43 +31,27 @@ impl Chunk {
             position: chunk_position,
             parts: std::array::from_fn(|_| ChunkPart::new_air()),
             generation_stage: GenerationStage::Empty,
-            generation_scheduled: false,
         }
     }
-    // pub fn insert_meshed_chunk_part(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, meshing_data: MeshingOutput, mesh_queue: &mut std::collections::VecDeque<(Vector2<i32>, usize)>) {
-    //     let faces_size = meshing_data.faces.len() as u32;
-    //     let chunk_part_index = meshing_data.chunk_part_index;
-    //     let chunk_position = meshing_data.chunk_position;
 
-    //     let mut needs_resizing = false;
-    //     while self.mesh.face_bucket_elements[chunk_part_index] < faces_size {
-    //         self.mesh.face_bucket_elements[chunk_part_index] *= 2;
-    //         needs_resizing = true;
-    //     }
+    pub fn get_block(&self, position: Vector3<usize>) -> Option<&Block> {
+        let chunk_part_index = position.y / CHUNK_SIZE;
+        if chunk_part_index >= PARTS_PER_CHUNK { return None; }
 
-    //     if needs_resizing {
-    //         self.mesh.resize(device);
-    //         for i in 0..PARTS_PER_CHUNK {
-    //             if i == chunk_part_index { continue; }
-    //             let chunk_part = &mut self.parts[i];
-    //             if chunk_part.meshing_scheduled { continue; }
-    //             chunk_part.meshed = false;
-    //             chunk_part.meshing_scheduled = true;
-    //             mesh_queue.push_front((chunk_position, i));
-    //         }
-    //     }
+        let position_in_chunk_part = position.map(|f| f.rem_euclid(CHUNK_SIZE));
+        let part = &self.parts[chunk_part_index];
+        Some(part.get_block(position_in_chunk_part))
+    }
 
-    //     let indirect_buffer_offset = (chunk_part_index * std::mem::size_of::<wgpu::util::DrawIndexedIndirectArgs>()) as u64;
-    //     let face_buffer_offset = ((0..chunk_part_index).map(|i| self.mesh.face_bucket_elements[i]).sum::<u32>() * std::mem::size_of::<FacePacked>() as u32) as u64;
-    //     if meshing_data.faces_num > 0 {
-    //         queue.write_buffer(self.mesh.face_buffer(), face_buffer_offset, bytemuck::cast_slice(&meshing_data.faces));
-    //     }
-    //     queue.write_buffer(self.mesh.indirect_buffer(), indirect_buffer_offset, self.mesh.create_indirect_args(meshing_data.faces_num, chunk_part_index).as_bytes());
+    pub fn set_block(&mut self, position: Vector3<usize>, block: Block) {
+        let chunk_part_index = position.y / CHUNK_SIZE;
+        if chunk_part_index >= PARTS_PER_CHUNK { return; }
 
-    //     let part = &mut self.parts[chunk_part_index];
-    //     part.meshing_scheduled = false;
-    //     part.meshed = true;
-    // }
+        let position_in_chunk = position.map(|f| f.rem_euclid(CHUNK_SIZE));
+        let part = &mut self.parts[chunk_part_index];
+
+        part.set_block(position_in_chunk.into(), block);
+    }
 }
 static CHUNK_TRANSLATION_BIND_GROUP_LAYOUT: OnceLock<wgpu::BindGroupLayout> = OnceLock::new();
 

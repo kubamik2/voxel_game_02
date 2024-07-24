@@ -6,8 +6,6 @@ use winit::{event::{DeviceEvent, Event, WindowEvent}, event_loop::EventLoop};
 
 use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, interval::{Interval, IntervalThread}, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MODEL_VARIANTS, QUADS};
 
-const S: usize = 1;
-
 pub struct State {
     game_window: GameWindow,
 
@@ -21,18 +19,10 @@ pub struct State {
     surface_config: wgpu::SurfaceConfiguration,
     aspect_ratio: f32,
     settings_path: std::path::PathBuf,
-    pipeline: wgpu::RenderPipeline,
-
-    quad_buffer: QuadBuffer,
-
-    view_projection: crate::camera::ViewProjection,
 
     camera: crate::camera::CameraTemp,
 
-    index_buffer: wgpu::Buffer,
 
-    texture_atlas: TextureAtlas,
-    depth_texture: Texture,
 
     chunk_manager: ChunkManager,
 
@@ -57,7 +47,7 @@ impl State {
         }).await.expect("Couldn't create adapter");
 
         let required_limits = wgpu::Limits {
-            max_bind_groups: 8,
+            max_bind_groups: 6,
             max_buffer_size: i32::MAX as u64,
             ..Default::default()
         };
@@ -90,93 +80,12 @@ impl State {
         surface.configure(&device, &surface_config);
         let aspect_ratio = surface_config.width as f32 / surface_config.height as f32;
         
-        let quad_buffer = QuadBuffer::new(&device, &QUADS);
-
-
-        const INDICES: &[u32] = &[0, 1, 2,  1, 3, 2];
-        let mut indices = vec![];
-        for i in 0..128 * 128 * 128 * 6 as u32 {
-            indices.extend(INDICES.iter().cloned().map(|f| f + i * 4))
-        }
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            usage: wgpu::BufferUsages::INDEX,
-            contents: bytemuck::cast_slice(&indices)
-        });
-        
         let camera = crate::camera::CameraTemp::new();
-        let mut view_projection = crate::camera::ViewProjection::new(&device);
-        view_projection.update(&camera, aspect_ratio);
 
-        let texture_atlas = TextureAtlas::new("./assets/atlases/block_01.png", &device, &queue);
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
-            bind_group_layouts: &[
-                crate::camera::ViewProjection::get_or_init_bind_group_layout(&device),
-                crate::world::chunk::dynamic_chunk_mesh::DynamicChunkMesh::get_or_init_face_buffer_bind_group_layout(&device),
-                QuadBuffer::get_or_init_bind_group_layout(&device),
-                TextureAtlas::get_or_init_bind_group_layout(&device),
-                crate::world::chunk::ChunkTranslation::get_or_init_bind_group_layout(&device),
-            ],
-            push_constant_ranges: &[],
-        });
-
-        let shaders = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(include_str!("./shaders/model.wgsl").into())
-        });
-
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: None,
-            depth_stencil: Some(wgpu::DepthStencilState {
-                bias: wgpu::DepthBiasState::default(),
-                depth_compare: wgpu::CompareFunction::Less,
-                depth_write_enabled: true,
-                format: Texture::DEPTH_FORMAT,
-                stencil: wgpu::StencilState::default()
-            }),
-            vertex: wgpu::VertexState {
-                buffers: &[],
-                entry_point: "vs_main",
-                module: &shaders,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                entry_point: "fs_main",
-                module: &shaders,
-                targets: &[Some(
-                    wgpu::ColorTargetState {
-                        format: surface_config.format,
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::all()
-                    }
-                )],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            layout: Some(&pipeline_layout),
-            multisample: wgpu::MultisampleState {
-                alpha_to_coverage_enabled: false,
-                count: 1,
-                mask: !0
-            },
-            multiview: None,
-            primitive: wgpu::PrimitiveState {
-                conservative: false,
-                cull_mode: Some(wgpu::Face::Back),
-                front_face: wgpu::FrontFace::Ccw,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                strip_index_format: None,
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                unclipped_depth: false
-            },
-        });
-        
-        let depth_texture = Texture::create_depth_texture(&device, &surface_config, "depth_texture");
         let device = Arc::new(device);
         let queue = Arc::new(queue);
         
-        let chunk_manager = ChunkManager::new(device.clone(), queue.clone(), 10, 12, 12);
+        let chunk_manager = ChunkManager::new(16, 12, 12);
 
         Ok((
             Self {
@@ -189,13 +98,7 @@ impl State {
                 surface_config,
                 aspect_ratio,
                 settings_path: settings_path.to_owned(),
-                pipeline,
-                quad_buffer,
-                view_projection,
                 camera,
-                index_buffer,
-                texture_atlas,
-                depth_texture,
                 chunk_manager,
                 now: std::time::Instant::now(),
             }, 
@@ -231,7 +134,6 @@ impl State {
         let mut last_render_instant = std::time::Instant::now();
 
         let render_thread = RenderThread::new(state.device.clone(), state.queue.clone(), state.surface_config.clone());
-        let rendering_condvar_pair = render_thread.rendering_condvar_pair.clone();
         let mut interval_300hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 300.0));
         let mut interval_60hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 60.0));
 
@@ -254,7 +156,7 @@ impl State {
             }
 
             interval_300hz.tick(|| {
-                state.chunk_manager.update();
+                state.chunk_manager.update(&state.device);
             });
 
             interval_60hz.tick(|| {
@@ -273,11 +175,11 @@ impl State {
                             }
                             state.camera.update();
                             render_thread.update_view_projection(&state.camera, state.aspect_ratio);
-                            state.chunk_manager.collect_meshing_outputs();
+                            state.chunk_manager.collect_meshing_outputs(&state.device, &state.queue);
                             let meshes = state.chunk_manager.get_ready_meshes();
-                            if meshes.len() == (2 * state.chunk_manager.render_distance() as usize - 3) * (2 * state.chunk_manager.render_distance() as usize - 3) {
-                                dbg!(state.now.elapsed());
-                            }
+                            // if meshes.len() == (2 * state.chunk_manager.render_distance() as usize - 3) * (2 * state.chunk_manager.render_distance() as usize - 3) {
+                            //     dbg!(state.now.elapsed());
+                            // }
                             // state.chunk_manager.print_chunk_generation_stages();
                             render_thread.render(RenderArgs { surface: state.surface.clone(), game_window: state.game_window.clone(), aspect: state.aspect_ratio, meshes });
                             // println!("{:.1?} fps", 1.0 / last_render_instant.elapsed().as_secs_f64());

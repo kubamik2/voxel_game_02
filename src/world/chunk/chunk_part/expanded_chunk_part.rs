@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use cgmath::Vector2;
+use cgmath::{Vector2, Vector3};
 
 use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, Block}, world::{chunk::{chunk_map::ChunkMap, chunk_part::ChunkPart}, PARTS_PER_CHUNK}};
 
@@ -53,7 +53,7 @@ impl ExpandedChunkPart {
     }
 
     pub fn new(chunk_map: &ChunkMap, chunk_pos: Vector2<i32>, chunk_part_index: usize) -> Option<Self> {
-        let Some(chunk) = chunk_map.get(chunk_pos).map(|f| f.lock().unwrap()) else { return None; };
+        let Some(chunk) = chunk_map.get(chunk_pos) else { return None; };
         let Some(chunk_part) = chunk.parts.get(chunk_part_index) else { return None; };
 
         let mut expanded_chunk_part = Self {
@@ -64,14 +64,14 @@ impl ExpandedChunkPart {
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    *expanded_chunk_part.index_mut_inner_block_pallet_id((x, y, z)) = chunk_part.block_layers[(x, y, z)];
+                    *expanded_chunk_part.index_mut_inner_block_pallet_id((x, y, z)) = chunk_part.block_layers[Vector3 { x, y, z }];
                 }
             }
         }
 
         #[inline]
-        fn get_id_or_insert(expanded_chunk_part: &mut ExpandedChunkPart, chunk_part: &ChunkPart, index: (usize, usize, usize)) -> BlockPalletItemId {
-            let block = &chunk_part[index];
+        fn get_id_or_insert(expanded_chunk_part: &mut ExpandedChunkPart, chunk_part: &ChunkPart, local_position: Vector3<usize>) -> BlockPalletItemId {
+            let block = chunk_part.get_block(local_position);
             match expanded_chunk_part.block_pallet.get_block_pallet_id(block) {
                 Some(id) => id,
                 None => expanded_chunk_part.block_pallet.insert_block(block.clone())
@@ -80,12 +80,12 @@ impl ExpandedChunkPart {
         
 
         // +x
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x + 1, chunk_pos.y)).map(|f| f.lock().unwrap()) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x + 1, chunk_pos.y)) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE {
                 for z in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, y, z));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: y, z: z });
                     *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, y + 1, z + 1)) = id;
                 }
             }
@@ -93,7 +93,7 @@ impl ExpandedChunkPart {
             if chunk_part_index < PARTS_PER_CHUNK - 1 {
                 let chunk_part = &chunk.parts[chunk_part_index + 1];
                 for z in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, 0, z));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: 0, z: z });
                     *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, CHUNK_SIZE + 1, z + 1)) = id;
                 }
             }
@@ -101,19 +101,19 @@ impl ExpandedChunkPart {
             if chunk_part_index > 0 {
                 let chunk_part = &chunk.parts[chunk_part_index - 1];
                 for z in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, CHUNK_SIZE - 1, z));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: CHUNK_SIZE - 1, z: z });
                     *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, 0, z + 1)) = id;
                 }
             }
         }
 
         // -x
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x - 1, chunk_pos.y)).map(|f| f.lock().unwrap()) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x - 1, chunk_pos.y)) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE {
                 for z in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, y, z));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: y, z: z });
                     *expanded_chunk_part.index_mut_block_pallet_id((0, y + 1, z + 1)) = id;
                 }
             }
@@ -121,7 +121,7 @@ impl ExpandedChunkPart {
             if chunk_part_index < PARTS_PER_CHUNK - 1 {
                 let chunk_part = &chunk.parts[chunk_part_index + 1];
                 for z in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, 0, z));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: 0, z: z });
                     *expanded_chunk_part.index_mut_block_pallet_id((0, CHUNK_SIZE + 1, z + 1)) = id;
                 }
             }
@@ -129,19 +129,19 @@ impl ExpandedChunkPart {
             if chunk_part_index > 0 {
                 let chunk_part = &chunk.parts[chunk_part_index - 1];
                 for z in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, CHUNK_SIZE - 1, z));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: CHUNK_SIZE - 1, z: z });
                     *expanded_chunk_part.index_mut_block_pallet_id((0, 0, z + 1)) = id;
                 }
             }
         }
 
         // +z
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x, chunk_pos.y + 1)).map(|f| f.lock().unwrap()) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x, chunk_pos.y + 1)) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (x, y, 0));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: x, y: y, z: 0 });
                     *expanded_chunk_part.index_mut_block_pallet_id((x + 1, y + 1, CHUNK_SIZE + 1)) = id;
                 }
             }
@@ -149,7 +149,7 @@ impl ExpandedChunkPart {
             if chunk_part_index < PARTS_PER_CHUNK - 1 {
                 let chunk_part = &chunk.parts[chunk_part_index + 1];
                 for x in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (x, 0, 0));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: x, y: 0, z: 0 });
                     *expanded_chunk_part.index_mut_block_pallet_id((x + 1, CHUNK_SIZE + 1, CHUNK_SIZE + 1)) = id;
                 }
             }
@@ -157,19 +157,19 @@ impl ExpandedChunkPart {
             if chunk_part_index > 0 {
                 let chunk_part = &chunk.parts[chunk_part_index - 1];
                 for x in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (x, CHUNK_SIZE - 1, 0));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: x, y: CHUNK_SIZE - 1, z: 0 });
                     *expanded_chunk_part.index_mut_block_pallet_id((x + 1, 0, CHUNK_SIZE + 1)) = id;
                 }
             }
         }
 
         // -z
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x, chunk_pos.y - 1)).map(|f| f.lock().unwrap()) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x, chunk_pos.y - 1)) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (x, y, CHUNK_SIZE - 1));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: x, y: y, z: CHUNK_SIZE - 1 });
                     *expanded_chunk_part.index_mut_block_pallet_id((x + 1, y + 1, 0)) = id;
                 }
             }
@@ -177,7 +177,7 @@ impl ExpandedChunkPart {
             if chunk_part_index < PARTS_PER_CHUNK - 1 {
                 let chunk_part = &chunk.parts[chunk_part_index + 1];
                 for x in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (x, 0, CHUNK_SIZE - 1));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: x, y: 0, z: CHUNK_SIZE - 1 });
                     *expanded_chunk_part.index_mut_block_pallet_id((x + 1, CHUNK_SIZE + 1, 0)) = id;
                 }
             }
@@ -185,7 +185,7 @@ impl ExpandedChunkPart {
             if chunk_part_index > 0 {
                 let chunk_part = &chunk.parts[chunk_part_index - 1];
                 for x in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (x, CHUNK_SIZE - 1, CHUNK_SIZE - 1));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: x, y: CHUNK_SIZE - 1, z: CHUNK_SIZE - 1 });
                     *expanded_chunk_part.index_mut_block_pallet_id((x + 1, 0, 0)) = id;
                 }
             }
@@ -196,7 +196,7 @@ impl ExpandedChunkPart {
             let chunk_part = &chunk.parts[chunk_part_index + 1];
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (x, 0, z));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: x, y: 0, z: z });
                     *expanded_chunk_part.index_mut_block_pallet_id((x + 1, CHUNK_SIZE + 1, z + 1)) = id;
                 }
             }
@@ -207,92 +207,92 @@ impl ExpandedChunkPart {
             let chunk_part = &chunk.parts[chunk_part_index - 1];
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (x, CHUNK_SIZE - 1, z));
+                    let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: x, y: CHUNK_SIZE - 1, z: z });
                     *expanded_chunk_part.index_mut_block_pallet_id((x + 1, 0, z + 1)) = id;
                 }
             }
         }
 
         // corner +x +z
-        if let Some(chunk) = chunk_map.get(chunk_pos.map(|f| f + 1)).map(|f| f.lock().unwrap()) {
+        if let Some(chunk) = chunk_map.get(chunk_pos.map(|f| f + 1)) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE {
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, y, 0));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: y, z: 0 });
                 *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, y + 1, CHUNK_SIZE + 1)) = id;
             }
 
             if chunk_part_index < PARTS_PER_CHUNK - 1 {
                 let chunk_part = &chunk.parts[chunk_part_index + 1];
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, 0, 0));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: 0, z: 0 });
                 *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, CHUNK_SIZE + 1, CHUNK_SIZE + 1)) = id;
             }
 
             if chunk_part_index > 0 {
                 let chunk_part = &chunk.parts[chunk_part_index - 1];
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, CHUNK_SIZE - 1, 0));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: CHUNK_SIZE - 1, z: 0 });
                 *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, 0, CHUNK_SIZE + 1)) = id;
             }
         }
 
         // corner -x +z
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x - 1, chunk_pos.y + 1)).map(|f| f.lock().unwrap()) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x - 1, chunk_pos.y + 1)) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE {
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, y, 0));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: y, z: 0 });
                 *expanded_chunk_part.index_mut_block_pallet_id((0, y + 1, CHUNK_SIZE + 1)) = id;
             }
 
             if chunk_part_index < PARTS_PER_CHUNK - 1 {
                 let chunk_part = &chunk.parts[chunk_part_index + 1];
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, 0, 0));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: 0, z: 0 });
                 *expanded_chunk_part.index_mut_block_pallet_id((0, CHUNK_SIZE + 1, CHUNK_SIZE + 1)) = id;
             }
 
             if chunk_part_index > 0 {
                 let chunk_part = &chunk.parts[chunk_part_index - 1];
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, CHUNK_SIZE - 1, 0));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: CHUNK_SIZE - 1, z: 0 });
                 *expanded_chunk_part.index_mut_block_pallet_id((0, 0, CHUNK_SIZE + 1)) = id;
             }
         }
 
         // corner +x -z
-        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x + 1, chunk_pos.y - 1)).map(|f| f.lock().unwrap()) {
+        if let Some(chunk) = chunk_map.get(Vector2::new(chunk_pos.x + 1, chunk_pos.y - 1)) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE {
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, y, CHUNK_SIZE - 1));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: y, z: CHUNK_SIZE - 1 });
                 *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, y + 1, 0)) = id;
             }
 
             if chunk_part_index < PARTS_PER_CHUNK - 1 {
                 let chunk_part = &chunk.parts[chunk_part_index + 1];
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, 0, CHUNK_SIZE - 1));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: 0, z: CHUNK_SIZE - 1 });
                 *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, CHUNK_SIZE + 1, 0)) = id;
             }
 
             if chunk_part_index > 0 {
                 let chunk_part = &chunk.parts[chunk_part_index - 1];
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (0, CHUNK_SIZE - 1, CHUNK_SIZE - 1));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: 0, y: CHUNK_SIZE - 1, z: CHUNK_SIZE - 1 });
                 *expanded_chunk_part.index_mut_block_pallet_id((CHUNK_SIZE + 1, 0, 0)) = id;
             }
         }
 
         // corner -x -z
-        if let Some(chunk) = chunk_map.get(chunk_pos.map(|f| f - 1)).map(|f| f.lock().unwrap()) {
+        if let Some(chunk) = chunk_map.get(chunk_pos.map(|f| f - 1)) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE {
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, y, CHUNK_SIZE - 1));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: y, z: CHUNK_SIZE - 1 });
                 *expanded_chunk_part.index_mut_block_pallet_id((0, y + 1, 0)) = id;
             }
 
             if chunk_part_index < PARTS_PER_CHUNK - 1 {
                 let chunk_part = &chunk.parts[chunk_part_index + 1];
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, 0, CHUNK_SIZE - 1));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: 0, z: CHUNK_SIZE - 1 });
                 *expanded_chunk_part.index_mut_block_pallet_id((0, CHUNK_SIZE + 1, 0)) = id;
             }
 
             if chunk_part_index > 0 {
                 let chunk_part = &chunk.parts[chunk_part_index - 1];
-                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, (CHUNK_SIZE - 1, CHUNK_SIZE - 1, CHUNK_SIZE - 1));
+                let id = get_id_or_insert(&mut expanded_chunk_part, chunk_part, Vector3 { x: CHUNK_SIZE - 1, y: CHUNK_SIZE - 1, z: CHUNK_SIZE - 1 });
                 *expanded_chunk_part.index_mut_block_pallet_id((0, 0, 0)) = id;
             }
         }

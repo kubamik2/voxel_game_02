@@ -1,34 +1,61 @@
 pub const LIGHT_LEVEL_BITS: u32 = 4;
-pub const LIGHT_LEVEL_MAX_VALUE: u8 = 2_u8.pow(LIGHT_LEVEL_BITS);
+pub const LIGHT_LEVEL_MAX_VALUE: u8 = (1 << LIGHT_LEVEL_BITS) - 1;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct LightLevel(u8);
 
 impl LightLevel {
     #[inline]
-    pub fn new(level: u8) -> Option<Self> {
-        if level > LIGHT_LEVEL_MAX_VALUE { return None; }
-        Some(LightLevel(level))
+    fn invariants_satisfied(level: u8) -> bool {
+        level <= LIGHT_LEVEL_MAX_VALUE
     }
 
     #[inline]
-    pub fn add(&self, level: u8) -> Option<Self> {
-        if let Some(inner) = self.0.checked_add(level) {
-            return Self::new(inner);
-        }
-        None
+    pub fn new(block_level: u8, sky_level: u8) -> Option<Self> {
+        if !Self::invariants_satisfied(block_level) || !Self::invariants_satisfied(sky_level) { return None; }
+        Some(LightLevel(block_level | (sky_level << LIGHT_LEVEL_BITS)))
     }
 
     #[inline]
-    pub fn sub(&self, level: u8) -> Option<Self> {
-        if let Some(inner) = self.0.checked_sub(level) {
-            return Self::new(inner);
-        }
-        None
+    pub fn set_block(&mut self, level: u8) {
+        assert!(Self::invariants_satisfied(level));
+        self.0 &= LIGHT_LEVEL_MAX_VALUE << LIGHT_LEVEL_BITS;
+        self.0 |= level;
+    }
+    
+    #[inline]
+    pub fn set_block_saturate(&mut self, mut level: u8) {
+        level = level.min(LIGHT_LEVEL_MAX_VALUE);
+        self.0 &= LIGHT_LEVEL_MAX_VALUE << LIGHT_LEVEL_BITS;
+        self.0 |= level;
     }
 
     #[inline]
-    pub fn get(&self) -> u8 {
+    pub fn get_block(&self) -> u8 {
+        self.0 & LIGHT_LEVEL_MAX_VALUE
+    }
+
+    #[inline]
+    pub fn set_sky(&mut self, level: u8) {
+        assert!(Self::invariants_satisfied(level));
+        self.0 &= LIGHT_LEVEL_MAX_VALUE;
+        self.0 |= level << LIGHT_LEVEL_BITS;
+    }
+
+    #[inline]
+    pub fn set_sky_saturate(&mut self, mut level: u8) {
+        level = level.min(LIGHT_LEVEL_MAX_VALUE);
+        self.0 &= LIGHT_LEVEL_MAX_VALUE;
+        self.0 |= level << LIGHT_LEVEL_BITS;
+    }
+
+    #[inline]
+    pub fn get_sky(&self) -> u8 {
+        self.0 >> LIGHT_LEVEL_BITS
+    }
+
+    #[inline]
+    pub fn to_u8(&self) -> u8 {
         self.0
     }
 }

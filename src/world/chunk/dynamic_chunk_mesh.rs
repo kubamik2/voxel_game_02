@@ -132,7 +132,6 @@ impl DynamicChunkMesh {
     pub fn insert_meshed_chunk_part(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, meshing_data: MeshingOutput) {
         let faces_size = meshing_data.faces.len() as u32;
         let chunk_part_index = meshing_data.chunk_part_index;
-        let chunk_position = meshing_data.chunk_position;
 
         let mut needs_resizing = false;
         while self.face_bucket_elements[chunk_part_index] < faces_size {

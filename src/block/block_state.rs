@@ -23,4 +23,5 @@ pub enum Value {
     String(String),
     Struct(HashMap<String, Value>),
     // Bytes(Box<[u8]>),
+    Bool(bool)
 }

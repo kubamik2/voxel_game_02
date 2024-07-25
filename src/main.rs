@@ -25,6 +25,13 @@ lazy_static::lazy_static! {
     pub static ref BLOCK_LIST: BlockList = _TEMP.1.clone();
     pub static ref BLOCK_MODEL_VARIANTS: BlockModelVariants = _TEMP.2.clone();
     pub static ref QUADS: Vec<QuadRaw> = _TEMP.3.clone();
+    pub static ref OBSTRUCTS_LIGHT_CACHE: Box<[bool]> = {
+        let mut v = vec![];
+        for info in BLOCK_LIST.iter() {
+            v.push(info.properties().obstructs_light);
+        }
+        v.into_boxed_slice()
+    };
 }
 
 fn main() -> anyhow::Result<()> {

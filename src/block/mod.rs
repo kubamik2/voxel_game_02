@@ -71,7 +71,7 @@ impl BlockInformation {
     }
 }
 
-impl Into<Block> for  BlockInformation {
+impl Into<Block> for BlockInformation {
     fn into(self) -> Block {
         Block { id: self.id, name: self.name, block_state: self.default_state }
     }

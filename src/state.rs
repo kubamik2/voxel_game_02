@@ -22,8 +22,6 @@ pub struct State {
 
     camera: crate::camera::CameraTemp,
 
-
-
     chunk_manager: ChunkManager,
 
     now: std::time::Instant,
@@ -86,7 +84,6 @@ impl State {
         let queue = Arc::new(queue);
         
         let chunk_manager = ChunkManager::new(16, 12, 12);
-
         Ok((
             Self {
                 game_window,

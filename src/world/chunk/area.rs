@@ -3,7 +3,7 @@ use std::{mem::MaybeUninit, sync::Arc};
 use cgmath::{Vector2, Vector3};
 use hashbrown::HashMap;
 
-use crate::{block::{light::{LightLevel, LightNode}, Block}, world::{structure::Structure, PARTS_PER_CHUNK}, BLOCK_LIST, BLOCK_MAP};
+use crate::{block::{light::{LightLevel, LightNode}, Block}, world::{structure::Structure, PARTS_PER_CHUNK}, BLOCK_LIST, BLOCK_MAP, OBSTRUCTS_LIGHT_CACHE};
 
 use super::{chunk_map::ChunkMap, chunk_part::CHUNK_SIZE, Chunk};
 
@@ -112,7 +112,7 @@ impl Area {
             let light_node_position = Vector3::new(light_node.x as i16, light_node.y as i16, light_node.z as i16);
             let chunk_part_index_offset = light_node_position.y.div_euclid(CHUNK_SIZE as i16);
             let chunk_part_index = chunk_part_index as i16 + chunk_part_index_offset;
-            if chunk_part_index < 0 || chunk_part_index >= PARTS_PER_CHUNK as i16 { continue; }
+            if chunk_part_index.is_negative() || chunk_part_index >= PARTS_PER_CHUNK as i16 { continue; }
 
             let chunk_offset = light_node_position.xz().map(|f| f.div_euclid(CHUNK_SIZE as i16) as i32);
             let local_position = light_node_position.map(|f| f.rem_euclid(CHUNK_SIZE as i16) as usize);
@@ -121,7 +121,7 @@ impl Area {
             let chunk_part = &mut chunk.parts[chunk_part_index as usize];
             let Some(block) = chunk_part.get_block(local_position) else { continue; };
 
-            let obstructs_light = BLOCK_MAP.get(block.name()).unwrap().properties().obstructs_light;
+            let obstructs_light = OBSTRUCTS_LIGHT_CACHE[*block.id() as usize];
             if obstructs_light { continue; }
 
             let mut current_light_level = *chunk_part.light_level_layers.get_light_level(local_position);
@@ -166,7 +166,7 @@ impl Area {
             let light_node_position = Vector3::new(light_node.x as i16, light_node.y as i16, light_node.z as i16);
             let chunk_part_index_offset = light_node_position.y.div_euclid(CHUNK_SIZE as i16);
             let chunk_part_index = chunk_part_index as i16 + chunk_part_index_offset;
-            if chunk_part_index < 0 || chunk_part_index >= PARTS_PER_CHUNK as i16 { continue; }
+            if chunk_part_index.is_negative() || chunk_part_index >= PARTS_PER_CHUNK as i16 { continue; }
 
             let chunk_offset = light_node_position.xz().map(|f| f.div_euclid(CHUNK_SIZE as i16) as i32);
             let local_position = light_node_position.map(|f| f.rem_euclid(CHUNK_SIZE as i16) as usize);
@@ -176,7 +176,7 @@ impl Area {
             
             let Some(block) = chunk_part.get_block(local_position) else { continue; };
 
-            let obstructs_light = BLOCK_LIST.get(*block.id()).unwrap().properties().obstructs_light;
+            let obstructs_light = OBSTRUCTS_LIGHT_CACHE[*block.id() as usize];
             if obstructs_light { continue; }
 
             let mut current_light_level = *chunk_part.light_level_layers.get_light_level(local_position);

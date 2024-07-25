@@ -147,12 +147,12 @@ impl ChunkGenerator {
     }
 
     fn light_emit(area: &mut Area) {
-        // let now = std::time::Instant::now();
+        let now = std::time::Instant::now();
         for chunk_part_index in 0..PARTS_PER_CHUNK {
             area.propagate_block_light_in_chunk_part(chunk_part_index);
         }
         area.propagate_sky_light();
-        // dbg!(now.elapsed());
+        dbg!(now.elapsed());
         area.get_chunk_mut(Vector2::new(0, 0)).unwrap().generation_stage = GenerationStage::Light;
     }
 

@@ -177,6 +177,16 @@ impl BlockList {
     pub fn get(&self, id: BlockId) -> Option<&BlockInformation> {
         self.0.get(id as usize)
     }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    #[inline]
+    pub fn iter(&self) -> std::slice::Iter<BlockInformation> {
+        self.0.iter()
+    }
 }
 
 impl Index<BlockId> for BlockList {

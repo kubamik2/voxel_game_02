@@ -1,4 +1,4 @@
-use crate::world::chunk::chunk_part::CHUNK_SIZE;
+use crate::{world::chunk::chunk_part::CHUNK_SIZE, BLOCK_MAP};
 
 use super::{block_state::BlockState, Block};
 
@@ -19,7 +19,7 @@ impl BlockPallet {
     pub fn new_air() -> Self {
         let items = vec![Some(
             BlockPalletItem {
-                block: Block::new(0, "air", BlockState::new()),
+                block: BLOCK_MAP.get("air").unwrap().clone().into(),
                 count: (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE + 1) as BlockPalletItemId,
             },
         )];

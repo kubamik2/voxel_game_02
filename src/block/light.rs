@@ -8,12 +8,12 @@ pub struct LightLevel(u8);
 
 impl LightLevel {
     #[inline]
-    fn invariants_satisfied(level: u8) -> bool {
+    const fn invariants_satisfied(level: u8) -> bool {
         level <= LIGHT_LEVEL_MAX_VALUE
     }
 
     #[inline]
-    pub fn new(block_level: u8, sky_level: u8) -> Option<Self> {
+    pub const fn new(block_level: u8, sky_level: u8) -> Option<Self> {
         if !Self::invariants_satisfied(block_level) || !Self::invariants_satisfied(sky_level) { return None; }
         Some(LightLevel(block_level | (sky_level << LIGHT_LEVEL_BITS)))
     }

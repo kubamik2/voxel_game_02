@@ -72,9 +72,16 @@ impl ChunkPart {
         self.block_layers.set_block_pallet_id(local_position, block_pallet_id);
     }
 
+    #[inline]
     pub fn get_block(&self, local_position: Vector3<usize>) -> Option<&Block> {
         let Some(block_pallet_id) = self.block_layers.get_block_pallet_id(local_position) else { return None; };
         Some(&self.block_pallet.get(block_pallet_id).unwrap().block)
+    }
+
+    #[inline]
+    pub unsafe fn get_block_unchecked(&self, local_position: Vector3<usize>) -> &Block {
+        let block_pallet_id = self.block_layers.get_block_pallet_id(local_position).unwrap_unchecked();
+        &self.block_pallet.get(block_pallet_id).unwrap_unchecked().block
     }
 
     // pub fn clear_light(&mut self) {

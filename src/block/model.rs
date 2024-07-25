@@ -274,7 +274,7 @@ pub struct QuadRaw {
 }
 
 pub struct Face {
-    pub lighting: [LightLevel; 4], // 4xu4,
+    pub lighting: [u8; 4], // 4xu4,
     pub block_position: [u8; 3], // 3xu5,
     pub texture_index: u16, // u16
     pub quad_index: u16, // u16
@@ -285,10 +285,10 @@ impl Face {
     pub const VERTICES_PER_FACE: usize = 4;
     pub fn pack(&self) -> FacePacked {
         FacePacked(
-            (self.lighting[0].get_block().max(self.lighting[0].get_sky()) as u64) |
-            (self.lighting[1].get_block().max(self.lighting[1].get_sky()) as u64) << (LIGHT_LEVEL_BITS) |
-            (self.lighting[2].get_block().max(self.lighting[2].get_sky()) as u64) << (2 * LIGHT_LEVEL_BITS) |
-            (self.lighting[3].get_block().max(self.lighting[3].get_sky()) as u64) << (3 * LIGHT_LEVEL_BITS) |
+            (self.lighting[0] as u64) |
+            (self.lighting[1] as u64) << (LIGHT_LEVEL_BITS) |
+            (self.lighting[2] as u64) << (2 * LIGHT_LEVEL_BITS) |
+            (self.lighting[3] as u64) << (3 * LIGHT_LEVEL_BITS) |
 
             ((self.block_position[0] & 0b11111) as u64) << (4 * LIGHT_LEVEL_BITS) |
             ((self.block_position[1] & 0b11111) as u64) << (4 * LIGHT_LEVEL_BITS + 5) |

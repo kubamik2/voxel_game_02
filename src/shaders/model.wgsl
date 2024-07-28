@@ -73,7 +73,7 @@ fn vs_main(@builtin(vertex_index) i: u32, @builtin(instance_index) instance_inde
     out.clip_position = camera.view_projection * vec4f(vertex, 1.0);
     out.uv = uv;
     out.texture_index = face.texture_index;
-    out.light = f32(face.lighting[i_mod_4] + 2) / 17.0;
+    out.light = f32(face.lighting[i_mod_4] + 2) / 18.0;
 
     return out;
 }

@@ -2,7 +2,7 @@ use std::{collections::VecDeque, sync::{mpsc::{channel, Receiver, Sender}, Arc, 
 use wgpu::util::DeviceExt;
 use cgmath::{Matrix4, Vector2};
 
-use crate::{block::quad_buffer::QuadBuffer, camera::{Camera, CameraTemp, ViewProjection}, game_window::GameWindow, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_mesh_map::ChunkMeshMap, chunk_part::chunk_part_mesher::MeshingOutput, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, QUADS};
+use crate::{block::quad_buffer::QuadBuffer, camera::{Camera, Player, ViewProjection}, game_window::GameWindow, gui::{egui_renderer::EguiRenderer, Gui}, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_mesh_map::ChunkMeshMap, chunk_part::chunk_part_mesher::MeshingOutput, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, QUADS};
 
 pub struct RenderThread {
     event_sender: Arc<Sender<RenderEvent>>,
@@ -17,15 +17,16 @@ pub enum RenderEvent {
 pub struct RenderArgs {
     pub surface: Arc<wgpu::Surface<'static>>,
     pub game_window: GameWindow,
-    pub aspect: f32,
     pub meshes: Box<[DynamicChunkMesh]>,
+    pub surface_config: wgpu::SurfaceConfiguration,
+    pub gui: Gui,
 }
 
 impl RenderThread {
-    pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration) -> Self {
+    pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, window: Arc<winit::window::Window>) -> Self {
         let (event_sender, event_receiver) = channel();
         let (work_done_sender, work_done_receiver) = channel();
-        std::thread::spawn(move || Self::run(event_receiver,  device, queue, surface_config, work_done_sender));
+        std::thread::spawn(move || Self::run(event_receiver,  device, queue, surface_config, work_done_sender, window));
         Self { event_sender: Arc::new(event_sender), work_done_receiver}
     }
 
@@ -37,8 +38,8 @@ impl RenderThread {
         self.event_sender.send(RenderEvent::UpdateViewProjection(camera.build_view_projection_matrix(aspect)))
     }
 
-    fn run(event_receiver: Receiver<RenderEvent>, device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>) {
-        let mut render_thread = RenderThreadInner::new(device, queue, surface_config, work_done_sender);
+    fn run(event_receiver: Receiver<RenderEvent>, device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>, window: Arc<winit::window::Window>) {
+        let mut render_thread = RenderThreadInner::new(device, queue, surface_config, work_done_sender, window);
         for event in event_receiver.iter() {
             match event {
                 RenderEvent::Render(args) => render_thread.render(args),
@@ -58,10 +59,12 @@ struct RenderThreadInner {
     view_projection: ViewProjection,
     render_pipeline: wgpu::RenderPipeline,
     work_done_sender: Sender<()>,
+    egui_renderer: EguiRenderer,
+    window: Arc<winit::window::Window>,
 }
 
 impl RenderThreadInner {
-    fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>) -> Self {
+    fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>, window: Arc<winit::window::Window>) -> Self {
         let depth_texture = Texture::create_depth_texture(&device, &surface_config, "depth texture");
         let texture_atlas = TextureAtlas::new("./assets/atlases/block_01.png", &device, &queue);
 
@@ -140,10 +143,11 @@ impl RenderThreadInner {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 unclipped_depth: false
             },
-            cache: None,
         });
 
-        Self { device, queue, depth_texture, texture_atlas, index_buffer, quad_buffer, view_projection, render_pipeline, work_done_sender }
+        let egui_renderer = EguiRenderer::new(&window, &surface_config, &device);
+
+        Self { device, queue, depth_texture, texture_atlas, index_buffer, quad_buffer, view_projection, render_pipeline, work_done_sender, egui_renderer, window }
     }
 
     fn render(&mut self, args: RenderArgs) {
@@ -186,6 +190,24 @@ impl RenderThreadInner {
         }
 
         self.view_projection.update_buffer(&self.queue);
+
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [args.surface_config.width, args.surface_config.height],
+            pixels_per_point: self.window.scale_factor() as f32
+        };
+
+        self.egui_renderer.draw(&self.device, &self.queue, &mut encoder, &self.window, &view, screen_descriptor, |ctx| {
+            egui::CentralPanel::default()
+            .show(ctx, |ui| {
+                ui.centered_and_justified(|center| 
+                    center.label(egui::RichText::new("+")
+                        .color(egui::Color32::DARK_GRAY)
+                        .size(32.0)
+                    )
+                )
+            });
+            args.gui.debug(ctx);
+        });
         
         self.queue.submit(std::iter::once(encoder.finish()));
 

@@ -144,7 +144,7 @@ impl DynamicChunkMesh {
             for i in 0..PARTS_PER_CHUNK {
                 if i == chunk_part_index || self.parts_meshing_scheduled[i] { continue; }
 
-                self.parts_meshed[i] = false;
+                // self.parts_meshed[i] = false;
                 self.parts_need_meshing[i] = true;
             }
         }
@@ -158,5 +158,6 @@ impl DynamicChunkMesh {
 
         self.parts_meshed[chunk_part_index] = true;
         self.parts_meshing_scheduled[chunk_part_index] = false;
+        self.parts_need_meshing[chunk_part_index] = false;
     }
 }

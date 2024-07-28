@@ -32,6 +32,7 @@ impl GameWindow {
             .build(&event_loop)?;
 
         window.set_cursor_visible(false);
+        window.set_outer_position(winit::dpi::LogicalPosition::new(0, 0));
 
         Ok((Self { window: Arc::new(window) }, event_loop))
     }

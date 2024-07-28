@@ -1,7 +1,9 @@
 // TODO change file name to better reflect it's contents
 use cgmath::{Deg, InnerSpace, Matrix4, Point3, Rad, Vector3, Vector4};
 use wgpu::util::DeviceExt;
-use winit::{event::ElementState, keyboard::KeyCode};
+use winit::{event::{ElementState, MouseButton}, keyboard::KeyCode};
+
+use crate::{block::Block, collision::bounding_box::{GlobalBoundingBox, Ray}, relative_vector::RelVec3, world::{chunk::{chunk_manager::ChunkManager, chunk_map::ChunkMap, chunk_mesh_map::ChunkMeshMap}, PARTS_PER_CHUNK}, BLOCK_LIST, BLOCK_MAP, BLOCK_MODEL_VARIANTS};
 
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -94,8 +96,8 @@ impl ViewProjection {
     }
 }
 
-pub struct CameraTemp {
-    pub position: Point3<f32>,
+pub struct Player {
+    pub position: RelVec3,
     pub direction: Vector3<f32>,
     pub yaw: Deg<f32>,
     pub pitch: Deg<f32>,
@@ -105,9 +107,12 @@ pub struct CameraTemp {
     pub is_right_pressed: bool,
     pub is_up_pressed: bool,
     pub is_down_pressed: bool,
+    pub is_left_mouse_pressed: bool,
+    pub is_right_mouse_pressed: bool,
+    pub last_block_modification: std::time::Instant,
 }
 const PITCH_LIMIT: f32 = 90.0 - 0.0001;
-impl CameraTemp {
+impl Player {
     pub fn new() -> Self {
         let yaw = Deg(90.0_f32);
         let pitch = Deg(0.0_f32);
@@ -122,7 +127,7 @@ impl CameraTemp {
         ).normalize();
 
         Self {
-            position: Point3::new(0.0, 100.0, -1.0),
+            position: RelVec3::from(Vector3::new(0.0, 200.0, 0.0)),
             direction,
             yaw,
             pitch,
@@ -132,6 +137,9 @@ impl CameraTemp {
             is_left_pressed: false,
             is_right_pressed: false,
             is_up_pressed: false,
+            is_left_mouse_pressed: false,
+            is_right_mouse_pressed: false,
+            last_block_modification: std::time::Instant::now(),
         }
     }
 
@@ -165,13 +173,32 @@ impl CameraTemp {
         }
     }
 
+    pub fn handle_mouse_input(&mut self, button: MouseButton, state: ElementState) {
+        let pressed = state.is_pressed();
+        match button {
+            MouseButton::Left => {
+                self.is_left_mouse_pressed = pressed;
+                if pressed {
+                    self.last_block_modification = std::time::Instant::now();
+                }
+            },
+            MouseButton::Right => {
+                self.is_right_mouse_pressed = pressed;
+                if pressed {
+                    self.last_block_modification = std::time::Instant::now();
+                }
+            },
+            _ => ()
+        }
+    }
+
     pub fn update(&mut self) {
         let forward = Vector3::new(self.direction.x, 0.0, self.direction.z).normalize();
         let right = forward.cross(Vector3::unit_y());
 
         let mut horizontal_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
         let mut vertical_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
-        let speed = 0.1;
+        let speed = 0.04;
 
         if self.is_forward_pressed {
             horizontal_movement_vector += forward;
@@ -205,13 +232,86 @@ impl CameraTemp {
         }
 
         if vertical_movement_vector.magnitude2() > 0.0 {
-            self.position += vertical_movement_vector * speed * 8.0;
+            self.position += vertical_movement_vector * speed * 10.0;
         }
     }
 
+    pub fn modify_block(&mut self, chunk_manager: &mut ChunkManager, block: Block) {
+        if self.last_block_modification.elapsed().as_nanos() == 0 { return; }
+        self.last_block_modification = std::time::Instant::now() + std::time::Duration::from_millis(200);
+        
+        let mut collided_face = None;
+        let mut collision_pos = None;
+        
+        for voxel_pos in self.position.interpolate_voxels(self.direction, 5.0) {
+            let Some(block) = chunk_manager.chunk_map.get_block(voxel_pos) else { continue; };
+            let block_info = BLOCK_LIST.get(*block.id()).unwrap();
+            if !block_info.properties().targetable { continue; }
+            let Some(variants) = BLOCK_MODEL_VARIANTS.get_model_variants(block) else { continue; };
+
+            let ray = Ray::new(self.position, self.direction, 5.0);
+            let mut nearest_collision = None;
+            for variant in variants {
+                for bounding_box in variant.hitboxes.iter() {
+                    let global_bounding_box = GlobalBoundingBox {
+                        start: voxel_pos + bounding_box.start,
+                        end: voxel_pos + bounding_box.end,
+                    };
+
+                    if let Some((face, t)) = global_bounding_box.ray_intersection_block_face_time(&ray) {
+                        match nearest_collision {
+                            Some((face, min_t)) => {
+                                if t < min_t {
+                                    nearest_collision = Some((face, min_t));
+                                }
+                            },
+                            None => {
+                                nearest_collision = Some((face, t));
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some((face, _)) = nearest_collision {
+                collided_face = Some(face);
+                collision_pos = Some(voxel_pos);
+                break;
+            }
+        }
+
+        let Some(face) = collided_face else { return; };
+        let mut voxel_pos = collision_pos.unwrap();
+
+        let air = BLOCK_MAP.get("air").unwrap().clone().into();
+        if self.is_left_mouse_pressed {
+            chunk_manager.chunk_map.set_block(voxel_pos, air);
+        } else if self.is_right_mouse_pressed {
+            voxel_pos = voxel_pos + face.normal();
+            {
+                let Some(block) = chunk_manager.chunk_map.get_block(voxel_pos) else { return; };
+                if !BLOCK_LIST.get(*block.id()).unwrap().properties().replaceable { return; }
+            }
+            chunk_manager.chunk_map.set_block(voxel_pos, block);
+        } else {
+            return;
+        }
+        
+        chunk_manager.changed_blocks.push(voxel_pos);
+        
+        let Some(mesh) = chunk_manager.chunk_mesh_map.get_mut(voxel_pos.chunk_pos.xz()) else { return; };
+        mesh.parts_need_meshing[voxel_pos.chunk_pos.y as usize] = true;
+
+        if voxel_pos.chunk_pos.y < PARTS_PER_CHUNK as i32 - 1 {
+            mesh.parts_need_meshing[voxel_pos.chunk_pos.y as usize + 1] = true;
+        }
+
+        if voxel_pos.chunk_pos.y > 0 {
+            mesh.parts_need_meshing[voxel_pos.chunk_pos.y as usize - 1] = true;
+        }
+    }
 }
 
-impl Camera for CameraTemp {
+impl Camera for Player {
     fn z_near(&self) -> f32 {
         0.1   
     }
@@ -225,7 +325,8 @@ impl Camera for CameraTemp {
     }
 
     fn camera_position(&self) -> Point3<f32> {
-        self.position
+        let vector: Vector3<f32> = self.position.into();
+        Point3 { x: vector.x, y: vector.y, z: vector.z }
     }
 
     fn fovy(&self) -> Deg<f32> {

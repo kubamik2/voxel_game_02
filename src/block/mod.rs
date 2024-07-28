@@ -82,7 +82,7 @@ pub struct Properties {
     #[serde(default)]
     pub alpha_mode: AlphaMode,
 
-    #[serde(default = "bool_false")]
+    #[serde(default = "bool_true")]
     pub targetable: bool,
 
     #[serde(default = "bool_false")]

@@ -10,6 +10,9 @@ use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::{Ligh
 pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_SIZE_F32: f32 = CHUNK_SIZE as f32;
 pub const CHUNK_SIZE_F64: f64 = CHUNK_SIZE as f64;
+pub const CHUNK_SIZE_I32: i32 = CHUNK_SIZE as i32;
+pub const CHUNK_SIZE_I16: i16 = CHUNK_SIZE as i16;
+pub const INVERSE_CHUNK_SIZE: f32 = 1.0 / CHUNK_SIZE_F32;
 
 
 #[derive(Clone)]
@@ -142,7 +145,7 @@ impl ChunkPart {
 }
 
 #[derive(Clone)]
-pub struct BlockLayers([BlockLayer; CHUNK_SIZE]);
+pub struct BlockLayers(pub [BlockLayer; CHUNK_SIZE]);
 
 impl BlockLayers {
     const LAYER_SIZE: usize = CHUNK_SIZE * CHUNK_SIZE;

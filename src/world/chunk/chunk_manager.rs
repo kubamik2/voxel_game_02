@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use cgmath::Vector2;
+use cgmath::{Vector2, Vector3};
 use hashbrown::HashSet;
 
-use crate::world::PARTS_PER_CHUNK;
+use crate::{relative_vector::RelVec3, world::PARTS_PER_CHUNK};
 
 use super::{chunk_generator::{ChunkGenerator, ChunkGeneratorOutput, GenerationStage}, chunk_map::ChunkMap, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart}, dynamic_chunk_mesh::DynamicChunkMesh, Chunk};
 
@@ -14,6 +14,7 @@ pub struct ChunkManager {
     chunk_generator: ChunkGenerator,
     render_radius: u32,
     scheduled_generations: HashSet<Vector2<i32>>,
+    pub changed_blocks: Vec<RelVec3>,
 }
 
 impl ChunkManager {
@@ -25,6 +26,7 @@ impl ChunkManager {
             chunk_generator: ChunkGenerator::new(generator_num_threads),
             render_radius: render_distance,
             scheduled_generations: HashSet::new(),
+            changed_blocks: vec![],
         }
     }
 
@@ -114,7 +116,7 @@ impl ChunkManager {
         for chunk in self.chunk_map.values() {
             if issued_meshings >= idle_mesh_threads { break; }
             let chunk_position = {
-                if chunk.generation_stage != GenerationStage::LAST_GENERATION_STAGE { continue; }
+                // if chunk.generation_stage != GenerationStage::LAST_GENERATION_STAGE { continue; }
                 chunk.position
             };
 
@@ -123,9 +125,9 @@ impl ChunkManager {
             match self.chunk_mesh_map.entry(chunk_position) {
                 std::collections::hash_map::Entry::Occupied(mut occupied) => {
                     let mesh = occupied.get_mut();
-                    for (chunk_part_index, (is_part_meshed, is_part_meshing_scheduled)) in itertools::izip!(mesh.parts_meshed, mesh.parts_meshing_scheduled).enumerate() {
+                    for (chunk_part_index, (is_part_meshed, is_part_meshing_scheduled, needs_meshing)) in itertools::izip!(mesh.parts_meshed, mesh.parts_meshing_scheduled, mesh.parts_need_meshing).enumerate() {
                         if issued_meshings >= idle_mesh_threads { break; }
-                        if is_part_meshed || is_part_meshing_scheduled { continue; }
+                        if (is_part_meshed && !needs_meshing) || is_part_meshing_scheduled { continue; }
 
                         mesh.parts_meshing_scheduled[chunk_part_index] = true;
                         let expanded_chunk_part = ExpandedChunkPart::new(&self.chunk_map, chunk_position, chunk_part_index).unwrap();

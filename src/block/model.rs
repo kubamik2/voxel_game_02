@@ -221,6 +221,31 @@ impl BlockModelVariants {
         Some(models.into_boxed_slice())
     }
 
+    pub fn get_model_variants<'a>(&'a self, block: &Block) -> Option<Box<[&'a BlockModelVariant]>> {
+        let Some(variants) = self.models.get(&block.name) else { return None; };
+        let mut current_block_variants = vec![];
+        for variant in variants.iter() {
+            'inner: for (name, value) in variant.required_state.iter() {
+                let Some(block_state_value) = block.block_state.get(&name) else { continue 'inner; };
+                if *block_state_value == *value {
+                    if variant.standalone {
+                        current_block_variants.clear();
+                        current_block_variants.push(variant);
+                        return Some(current_block_variants.into_boxed_slice());
+                    }
+                }
+            }
+            if variant.required_state.is_empty() {
+                if variant.standalone {
+                    current_block_variants.clear();
+                    current_block_variants.push(variant);
+                    return Some(current_block_variants.into_boxed_slice());
+                }
+            }
+        }
+        Some(current_block_variants.into_boxed_slice())
+    }
+
     pub fn insert(&mut self, block_name: String, model_variants: Box<[BlockModelVariant]>) {
         self.models.insert(block_name.into_boxed_str(), model_variants);
     }

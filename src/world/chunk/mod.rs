@@ -6,7 +6,7 @@ use chunk_part::{chunk_part_mesher::MeshingOutput, ChunkPart, CHUNK_SIZE};
 use dynamic_chunk_mesh::DynamicChunkMesh;
 use wgpu::util::DeviceExt;
 
-use crate::block::{model::FacePacked, Block};
+use crate::{block::{light::LightLevel, model::FacePacked, Block}, relative_vector::RelVec3};
 
 use super::PARTS_PER_CHUNK;
 
@@ -23,6 +23,7 @@ pub struct Chunk {
     pub position: Vector2<i32>,
     pub parts: [ChunkPart; PARTS_PER_CHUNK],
     pub generation_stage: GenerationStage,
+    pub highest_blocks: [(u8, u8); CHUNK_SIZE * CHUNK_SIZE],
 }
 
 impl Chunk {
@@ -31,11 +32,12 @@ impl Chunk {
             position: chunk_position,
             parts: std::array::from_fn(|_| ChunkPart::new_air()),
             generation_stage: GenerationStage::Empty,
+            highest_blocks: std::array::from_fn(|_| (0, 0)),
         }
     }
 
-    pub fn get_block(&self, position: Vector3<usize>) -> Option<&Block> {
-        let chunk_part_index = position.y / CHUNK_SIZE;
+    pub fn get_block_from_world(&self, position: Vector3<usize>) -> Option<&Block> {
+        let chunk_part_index = position.y.div_euclid(CHUNK_SIZE);
         if chunk_part_index >= PARTS_PER_CHUNK { return None; }
 
         let position_in_chunk_part = position.map(|f| f.rem_euclid(CHUNK_SIZE));
@@ -43,8 +45,8 @@ impl Chunk {
         part.get_block(position_in_chunk_part)
     }
 
-    pub fn set_block(&mut self, position: Vector3<usize>, block: Block) {
-        let chunk_part_index = position.y / CHUNK_SIZE;
+    pub fn set_block_from_world(&mut self, position: Vector3<usize>, block: Block) {
+        let chunk_part_index = position.y.div_euclid(CHUNK_SIZE);
         if chunk_part_index >= PARTS_PER_CHUNK { return; }
 
         let position_in_chunk = position.map(|f| f.rem_euclid(CHUNK_SIZE));
@@ -69,6 +71,13 @@ impl Chunk {
     pub fn maintain_parts(&mut self) {
         self.compress_parts();
         self.clean_up_parts();
+    }
+
+    pub fn get_light_level_from_relvec(&self, position: RelVec3) -> Option<&LightLevel> {
+        if position.chunk_pos.xz() != self.position { return None; }
+        if position.chunk_pos.y.is_negative() || position.chunk_pos.y >= PARTS_PER_CHUNK as i32 { return None; }
+        let local_position = position.local_pos().map(|f| f.floor() as usize);
+        Some(self.parts[position.chunk_pos.y as usize].light_level_layers.get_light_level(local_position))
     }
 }
 static CHUNK_TRANSLATION_BIND_GROUP_LAYOUT: OnceLock<wgpu::BindGroupLayout> = OnceLock::new();
@@ -133,7 +142,6 @@ impl ChunkTranslation {
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
     }
-
 }
 
 impl Drop for ChunkTranslation {

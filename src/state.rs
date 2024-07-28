@@ -4,7 +4,7 @@ use cgmath::{Point3, Vector2, Vector3};
 use wgpu::{util::DeviceExt, Device, Features, Queue};
 use winit::{event::{DeviceEvent, Event, WindowEvent}, event_loop::EventLoop};
 
-use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, interval::{Interval, IntervalThread}, relative_vector::RelVec3, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MODEL_VARIANTS, QUADS};
+use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, gui::Gui, interval::{Interval, IntervalThread}, relative_vector::RelVec3, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{area::Area, chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE, CHUNK_SIZE_I32}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MAP, BLOCK_MODEL_VARIANTS, QUADS};
 
 pub struct State {
     game_window: GameWindow,
@@ -20,7 +20,7 @@ pub struct State {
     aspect_ratio: f32,
     settings_path: std::path::PathBuf,
 
-    camera: crate::camera::CameraTemp,
+    camera: crate::camera::Player,
 
     chunk_manager: ChunkManager,
 
@@ -78,7 +78,7 @@ impl State {
         surface.configure(&device, &surface_config);
         let aspect_ratio = surface_config.width as f32 / surface_config.height as f32;
         
-        let camera = crate::camera::CameraTemp::new();
+        let camera = crate::camera::Player::new();
 
         let device = Arc::new(device);
         let queue = Arc::new(queue);
@@ -126,7 +126,7 @@ impl State {
         
         let mut last_render_instant = std::time::Instant::now();
 
-        let render_thread = RenderThread::new(state.device.clone(), state.queue.clone(), state.surface_config.clone());
+        let render_thread = RenderThread::new(state.device.clone(), state.queue.clone(), state.surface_config.clone(), state.game_window.window_arc().clone());
         let mut interval_300hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 300.0));
         let mut interval_60hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 60.0));
         let mut interval_2hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 2.0));
@@ -150,11 +150,30 @@ impl State {
             }
 
             interval_300hz.tick(|| {
+                let now = std::time::Instant::now();
+                while let Some(changed_block_position) = state.chunk_manager.changed_blocks.pop() {
+                    let Some(mut area) = Area::new(&mut state.chunk_manager.chunk_map, changed_block_position.chunk_pos.xz()) else { continue; };
+                    let afflicted_chunk_parts = area.update_sky_light_at(changed_block_position.local_pos().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk_pos.y * CHUNK_SIZE_I32, 0));
+                    let afflicted_chunk_parts2 = area.update_block_light_at(changed_block_position.local_pos().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk_pos.y * CHUNK_SIZE_I32, 0));
+                    for (chunk_position, chunk_part_index) in afflicted_chunk_parts {
+                        let Some(mesh) = state.chunk_manager.chunk_mesh_map.get_mut(chunk_position) else { continue; };
+                        mesh.parts_need_meshing[chunk_part_index] = true;
+                    }
+                    for (chunk_position, chunk_part_index) in afflicted_chunk_parts2 {
+                        let Some(mesh) = state.chunk_manager.chunk_mesh_map.get_mut(chunk_position) else { continue; };
+                        mesh.parts_need_meshing[chunk_part_index] = true;
+                    }
+                    for chunk in area.chunks {
+                        state.chunk_manager.chunk_map.insert_arc(chunk.position, chunk);
+                    }
+                }
+                // dbg!(now.elapsed());
                 state.chunk_manager.update(&state.device);
             });
 
             interval_60hz.tick(|| {
                 state.chunk_manager.insert_chunks_around_player(Vector2::new(0, 0));
+                state.camera.modify_block(&mut state.chunk_manager, BLOCK_MAP.get("cobblestone").unwrap().clone().into());
             });
 
             // interval_2hz.tick(|| {
@@ -162,8 +181,8 @@ impl State {
             //     let local_pos = rel_vec.local_pos().map(|f| f.floor() as usize);
             //     let Some(chunk) = state.chunk_manager.chunk_map.get(rel_vec.chunk_pos().xz()) else { return; };
             //     if rel_vec.chunk_pos().y < 0 || rel_vec.chunk_pos().y >= PARTS_PER_CHUNK as i32 { return; }
-
-            //     println!("chunk: {:?},  local: {:?},  light: {}", rel_vec.chunk_pos(), local_pos, chunk.parts[rel_vec.chunk_pos().y as usize].light_level_layers.get_light_level(local_pos).get_sky());
+            //     let highest_block = chunk.highest_blocks[local_pos.x + local_pos.z * CHUNK_SIZE];
+            //     // println!("chunk: {:?},  local: {:?},  high: {:?}, sky: {}", rel_vec.chunk_pos(), local_pos, highest_block, chunk.parts[rel_vec.chunk_pos().y as usize].light_level_layers.get_light_level(local_pos).get_sky());
             // });
 
             match event {
@@ -180,12 +199,13 @@ impl State {
                             render_thread.update_view_projection(&state.camera, state.aspect_ratio);
                             state.chunk_manager.collect_meshing_outputs(&state.device, &state.queue);
                             let meshes = state.chunk_manager.get_ready_meshes();
-                            // if meshes.len() == (2 * state.chunk_manager.render_distance() as usize - 3) * (2 * state.chunk_manager.render_distance() as usize - 3) {
-                            //     dbg!(state.now.elapsed());
-                            // }
-                            // state.chunk_manager.print_chunk_generation_stages();
-                            render_thread.render(RenderArgs { surface: state.surface.clone(), game_window: state.game_window.clone(), aspect: state.aspect_ratio, meshes });
-                            // println!("{:.1?} fps", 1.0 / last_render_instant.elapsed().as_secs_f64());
+                            render_thread.render(RenderArgs {
+                                surface: state.surface.clone(),
+                                game_window: state.game_window.clone(),
+                                meshes,
+                                surface_config: state.surface_config.clone(),
+                                gui: Gui::new(&state.camera, &state.chunk_manager.chunk_map),
+                            }).unwrap();
                             last_render_instant = std::time::Instant::now();
                         }
                         WindowEvent::Resized(new_size) => {
@@ -195,7 +215,11 @@ impl State {
                             if let winit::keyboard::PhysicalKey::Code(key_code) = event.physical_key {
                                 state.camera.handle_keyboard_input(key_code, event.state);
                             }
-                        }
+                        },
+                        WindowEvent::MouseInput { button, state: elem_state, .. } => {
+                            state.camera.handle_mouse_input(button, elem_state);
+                            state.camera.modify_block(&mut state.chunk_manager, BLOCK_MAP.get("cobblestone").unwrap().clone().into());
+                        },
                         _ => ()
                     }
                 },

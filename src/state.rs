@@ -4,7 +4,7 @@ use cgmath::{Point3, Vector2, Vector3};
 use wgpu::{util::DeviceExt, Device, Features, Queue};
 use winit::{event::{DeviceEvent, Event, WindowEvent}, event_loop::EventLoop};
 
-use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, gui::Gui, interval::{Interval, IntervalThread}, relative_vector::RelVec3, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{area::Area, chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE, CHUNK_SIZE_I32}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MAP, BLOCK_MODEL_VARIANTS, QUADS};
+use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, gui::Gui, interval::{Interval, IntervalThread}, global_vector::GlobalVecF, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{area::Area, chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE, CHUNK_SIZE_I32}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MAP, BLOCK_MODEL_VARIANTS, QUADS};
 
 pub struct State {
     game_window: GameWindow,
@@ -83,7 +83,7 @@ impl State {
         let device = Arc::new(device);
         let queue = Arc::new(queue);
         
-        let chunk_manager = ChunkManager::new(16, 12, 12);
+        let chunk_manager = ChunkManager::new(10, 12, 12);
         Ok((
             Self {
                 game_window,
@@ -150,30 +150,42 @@ impl State {
             }
 
             interval_300hz.tick(|| {
-                let now = std::time::Instant::now();
                 while let Some(changed_block_position) = state.chunk_manager.changed_blocks.pop() {
-                    let Some(mut area) = Area::new(&mut state.chunk_manager.chunk_map, changed_block_position.chunk_pos.xz()) else { continue; };
-                    let afflicted_chunk_parts = area.update_sky_light_at(changed_block_position.local_pos().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk_pos.y * CHUNK_SIZE_I32, 0));
-                    let afflicted_chunk_parts2 = area.update_block_light_at(changed_block_position.local_pos().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk_pos.y * CHUNK_SIZE_I32, 0));
+                    let mut afflicted_chunk_parts = vec![];
+                    let Some(chunk_part) = state.chunk_manager.chunk_map.get_mut_chunk_part(changed_block_position.chunk) else { continue; };
+                    
+                    let mut removed_light_emitters = std::mem::take(&mut chunk_part.removed_light_emitters);
+                    let mut added_light_emitters = std::mem::take(&mut chunk_part.added_light_emitters);
+
+                    let Some(mut area) = Area::new(&mut state.chunk_manager.chunk_map, changed_block_position.chunk.xz()) else { continue; };
+                    afflicted_chunk_parts.extend(area.update_sky_light_at(changed_block_position.local().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0)));
+                    afflicted_chunk_parts.extend(area.update_block_light_at(changed_block_position.local().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0)));
+                    
+                    while let Some(light_local_position) = removed_light_emitters.pop() {
+                        let area_position = light_local_position.map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0);
+                        afflicted_chunk_parts.extend(area.remove_block_light_at(area_position));
+                    }
+
+                    while let Some(light_local_position) = added_light_emitters.pop() {
+                        let area_position = light_local_position.map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0);
+                        afflicted_chunk_parts.extend(area.propagate_block_light_at(area_position));
+                    }
+
+                    for chunk in area.chunks {
+                        state.chunk_manager.chunk_map.insert_arc(chunk.position, chunk);
+                    }
+
                     for (chunk_position, chunk_part_index) in afflicted_chunk_parts {
                         let Some(mesh) = state.chunk_manager.chunk_mesh_map.get_mut(chunk_position) else { continue; };
                         mesh.parts_need_meshing[chunk_part_index] = true;
                     }
-                    for (chunk_position, chunk_part_index) in afflicted_chunk_parts2 {
-                        let Some(mesh) = state.chunk_manager.chunk_mesh_map.get_mut(chunk_position) else { continue; };
-                        mesh.parts_need_meshing[chunk_part_index] = true;
-                    }
-                    for chunk in area.chunks {
-                        state.chunk_manager.chunk_map.insert_arc(chunk.position, chunk);
-                    }
                 }
-                // dbg!(now.elapsed());
                 state.chunk_manager.update(&state.device);
             });
 
             interval_60hz.tick(|| {
                 state.chunk_manager.insert_chunks_around_player(Vector2::new(0, 0));
-                state.camera.modify_block(&mut state.chunk_manager, BLOCK_MAP.get("cobblestone").unwrap().clone().into());
+                state.camera.modify_block(&mut state.chunk_manager, BLOCK_MAP.get("lamp").unwrap().clone().into());
             });
 
             // interval_2hz.tick(|| {
@@ -218,7 +230,7 @@ impl State {
                         },
                         WindowEvent::MouseInput { button, state: elem_state, .. } => {
                             state.camera.handle_mouse_input(button, elem_state);
-                            state.camera.modify_block(&mut state.chunk_manager, BLOCK_MAP.get("cobblestone").unwrap().clone().into());
+                            state.camera.modify_block(&mut state.chunk_manager, BLOCK_MAP.get("lamp").unwrap().clone().into());
                         },
                         _ => ()
                     }

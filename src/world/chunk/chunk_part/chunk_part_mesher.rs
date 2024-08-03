@@ -64,7 +64,7 @@ impl ChunkPartMesher {
                             let quad_culling_per_face = block_model.quad_culling_per_face;
                             for face_num in 0..FACE_DIRECTIONS_NUM {
                                 let face_direction = unsafe { std::mem::transmute::<u8, FaceDirection>(face_num as u8) };
-                                let normal = face_direction.normal().map(|f| f as i32);
+                                let normal = face_direction.normal_f32().map(|f| f as i32);
                                 
                                 let quad_indices = &quad_indices_per_face[face_num];
                                 let texture_indices = &texture_indices_per_face[face_num];
@@ -86,13 +86,11 @@ impl ChunkPartMesher {
                                         }
                                     } 
                                 };
-                                let mut light = adjacent_block_light_level.get_block().max(adjacent_block_light_level.get_sky());
-                                if face_num == 0 || face_num == 1 { light = light.saturating_sub(8); }
                                 for (quad_index, texture_index, culling) in itertools::izip!(IntoIterator::into_iter(quad_indices), IntoIterator::into_iter(texture_indices), IntoIterator::into_iter(quad_culling)){
                                     if can_cull && *culling { continue; }
                                     faces.push(Face {
                                         block_position: [x as u8, y as u8, z as u8],
-                                        lighting: [light; 4],
+                                        lighting: [adjacent_block_light_level; 4],
                                         texture_index: *texture_index,
                                         quad_index: *quad_index,
                                     }.pack())

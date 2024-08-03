@@ -97,14 +97,14 @@ impl ChunkGenerator {
             .with_freq(0.05)
             .with_seed(1)
             .generate().0;
-            let cobblestone_id = part.block_pallet.insert_block(BLOCK_MAP.get("cobblestone").unwrap().clone().into());
+            let stone_id = part.block_pallet.insert_block(BLOCK_MAP.get("stone").unwrap().clone().into());
             for y in 0..CHUNK_SIZE {
                 for z in 0..CHUNK_SIZE {
                     for x in 0..CHUNK_SIZE {
                         let a = (y + chunk_part_index * CHUNK_SIZE).saturating_sub(200) as f32 / CHUNK_HEIGHT as f32;
                         let density = fbm[x + z * CHUNK_SIZE + y * CHUNK_SIZE * CHUNK_SIZE] - a.sqrt();
                         if density > 0.0 {
-                            part.set_block_pallet_id(Vector3 { x, y, z }, cobblestone_id);
+                            part.set_block_pallet_id(Vector3 { x, y, z }, stone_id);
                             let highest_block = &mut chunk.highest_blocks[x + z * CHUNK_SIZE];
                             if chunk_part_index as u8 > highest_block.0 {
                                 *highest_block = (chunk_part_index as u8, y as u8);

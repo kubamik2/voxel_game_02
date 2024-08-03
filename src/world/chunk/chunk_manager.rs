@@ -3,7 +3,7 @@ use std::sync::Arc;
 use cgmath::{Vector2, Vector3};
 use hashbrown::HashSet;
 
-use crate::{relative_vector::RelVec3, world::PARTS_PER_CHUNK};
+use crate::{global_vector::{GlobalVecF, GlobalVecU}, world::PARTS_PER_CHUNK};
 
 use super::{chunk_generator::{ChunkGenerator, ChunkGeneratorOutput, GenerationStage}, chunk_map::ChunkMap, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart}, dynamic_chunk_mesh::DynamicChunkMesh, Chunk};
 
@@ -14,7 +14,7 @@ pub struct ChunkManager {
     chunk_generator: ChunkGenerator,
     render_radius: u32,
     scheduled_generations: HashSet<Vector2<i32>>,
-    pub changed_blocks: Vec<RelVec3>,
+    pub changed_blocks: Vec<GlobalVecU>,
 }
 
 impl ChunkManager {
@@ -101,7 +101,7 @@ impl ChunkManager {
         for chunk_position in self.chunk_map.positions().cloned().collect::<Box<[Vector2<i32>]>>() {
             if issued_generations >= idle_gen_threads { break; }
             let generation_stage = {
-                let Some(chunk) = self.chunk_map.get(chunk_position) else { continue; };
+                let Some(chunk) = self.chunk_map.get_chunk(chunk_position) else { continue; };
                 if chunk.generation_stage == GenerationStage::LAST_GENERATION_STAGE { continue; }
                 if !self.chunk_map.is_chunk_surrounded_by_chunks_at_least_at_stage(chunk.position, chunk.generation_stage) { continue; }
                 chunk.generation_stage

@@ -1,9 +1,11 @@
+use std::sync::Arc;
+
 // TODO change file name to better reflect it's contents
-use cgmath::{Deg, InnerSpace, Matrix4, Point3, Rad, Vector3, Vector4};
+use cgmath::{Deg, InnerSpace, Matrix4, Point3, Rad, Vector2, Vector3, Vector4};
 use wgpu::util::DeviceExt;
 use winit::{event::{ElementState, MouseButton}, keyboard::KeyCode};
 
-use crate::{block::Block, collision::bounding_box::{GlobalBoundingBox, Ray}, relative_vector::RelVec3, world::{chunk::{chunk_manager::ChunkManager, chunk_map::ChunkMap, chunk_mesh_map::ChunkMeshMap}, PARTS_PER_CHUNK}, BLOCK_LIST, BLOCK_MAP, BLOCK_MODEL_VARIANTS};
+use crate::{block::{light::LightNode, Block}, collision::bounding_box::{GlobalBoundingBox, Ray}, global_vector::{GlobalVecF, GlobalVecU}, world::{chunk::{chunk_manager::ChunkManager, chunk_map::ChunkMap, chunk_mesh_map::ChunkMeshMap, chunk_part::CHUNK_SIZE}, PARTS_PER_CHUNK}, BLOCK_LIST, BLOCK_MAP, BLOCK_MODEL_VARIANTS};
 
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -97,7 +99,7 @@ impl ViewProjection {
 }
 
 pub struct Player {
-    pub position: RelVec3,
+    pub position: GlobalVecF,
     pub direction: Vector3<f32>,
     pub yaw: Deg<f32>,
     pub pitch: Deg<f32>,
@@ -127,7 +129,7 @@ impl Player {
         ).normalize();
 
         Self {
-            position: RelVec3::from(Vector3::new(0.0, 200.0, 0.0)),
+            position: GlobalVecF::from(Vector3::new(0.0, 200.0, 0.0)),
             direction,
             yaw,
             pitch,
@@ -244,7 +246,7 @@ impl Player {
         let mut collision_pos = None;
         
         for voxel_pos in self.position.interpolate_voxels(self.direction, 5.0) {
-            let Some(block) = chunk_manager.chunk_map.get_block(voxel_pos) else { continue; };
+            let Some(block) = chunk_manager.chunk_map.get_block_global(voxel_pos) else { continue; };
             let block_info = BLOCK_LIST.get(*block.id()).unwrap();
             if !block_info.properties().targetable { continue; }
             let Some(variants) = BLOCK_MODEL_VARIANTS.get_model_variants(block) else { continue; };
@@ -284,29 +286,67 @@ impl Player {
 
         let air = BLOCK_MAP.get("air").unwrap().clone().into();
         if self.is_left_mouse_pressed {
-            chunk_manager.chunk_map.set_block(voxel_pos, air);
+            let Some(changed_block) = chunk_manager.chunk_map.get_block_global(voxel_pos) else { return; };
+            let emitted_light = BLOCK_LIST.get(*changed_block.id()).unwrap().properties().emitted_light;
+            if emitted_light > 0 {
+                let Some(chunk_part) = chunk_manager.chunk_map.get_mut_chunk_part(voxel_pos.chunk) else { return; };
+                chunk_part.removed_light_emitters.push(voxel_pos.local());
+            }
+            
+            chunk_manager.chunk_map.set_block_global(voxel_pos, air);
         } else if self.is_right_mouse_pressed {
-            voxel_pos = voxel_pos + face.normal();
+            voxel_pos = voxel_pos + face.normal_i32();
             {
-                let Some(block) = chunk_manager.chunk_map.get_block(voxel_pos) else { return; };
+                let Some(block) = chunk_manager.chunk_map.get_block_global(voxel_pos) else { return; };
                 if !BLOCK_LIST.get(*block.id()).unwrap().properties().replaceable { return; }
             }
-            chunk_manager.chunk_map.set_block(voxel_pos, block);
+            let emitted_light = BLOCK_LIST.get(*block.id()).unwrap().properties().emitted_light;
+            if emitted_light > 0 {
+                let Some(chunk_part) = chunk_manager.chunk_map.get_mut_chunk_part(voxel_pos.chunk) else { return; };
+                chunk_part.set_block_light_level(voxel_pos.local(), emitted_light);
+                chunk_part.added_light_emitters.push(voxel_pos.local());
+            }
+            chunk_manager.chunk_map.set_block_global(voxel_pos, block);
         } else {
             return;
         }
         
         chunk_manager.changed_blocks.push(voxel_pos);
         
-        let Some(mesh) = chunk_manager.chunk_mesh_map.get_mut(voxel_pos.chunk_pos.xz()) else { return; };
-        mesh.parts_need_meshing[voxel_pos.chunk_pos.y as usize] = true;
+        #[inline]
+        fn mark_chunk_part_for_meshing(chunk_manager: &mut ChunkManager, offset: Vector2<i32>, voxel_pos: GlobalVecU) {
+            if let Some(mesh) = chunk_manager.chunk_mesh_map.get_mut(voxel_pos.chunk.xz() + offset) {
+                mesh.parts_need_meshing[voxel_pos.chunk.y as usize] = true;
+                if voxel_pos.chunk.y < PARTS_PER_CHUNK as i32 - 1 && voxel_pos.local().y == CHUNK_SIZE - 1 {
+                    mesh.parts_need_meshing[voxel_pos.chunk.y as usize + 1] = true;
+                }
 
-        if voxel_pos.chunk_pos.y < PARTS_PER_CHUNK as i32 - 1 {
-            mesh.parts_need_meshing[voxel_pos.chunk_pos.y as usize + 1] = true;
+                if voxel_pos.chunk.y > 0 && voxel_pos.local().y == 0 {
+                    mesh.parts_need_meshing[voxel_pos.chunk.y as usize - 1] = true;
+                }
+            }
         }
 
-        if voxel_pos.chunk_pos.y > 0 {
-            mesh.parts_need_meshing[voxel_pos.chunk_pos.y as usize - 1] = true;
+        if voxel_pos.local().x == 0 {
+            mark_chunk_part_for_meshing(chunk_manager, Vector2::new(-1, 0), voxel_pos);
+            if voxel_pos.local().z == 0 {
+                mark_chunk_part_for_meshing(chunk_manager, Vector2::new(-1, -1), voxel_pos);
+            } else if voxel_pos.local().z == CHUNK_SIZE - 1 {
+                mark_chunk_part_for_meshing(chunk_manager, Vector2::new(-1, 1), voxel_pos);
+            }
+        } else if voxel_pos.local().x == CHUNK_SIZE - 1 {
+            mark_chunk_part_for_meshing(chunk_manager, Vector2::new(1, 0), voxel_pos);
+            if voxel_pos.local().z == 0 {
+                mark_chunk_part_for_meshing(chunk_manager, Vector2::new(1, -1), voxel_pos);
+            } else if voxel_pos.local().z == CHUNK_SIZE - 1 {
+                mark_chunk_part_for_meshing(chunk_manager, Vector2::new(1, 1), voxel_pos);
+            }
+        }
+
+        if voxel_pos.local().z == 0 {
+            mark_chunk_part_for_meshing(chunk_manager, Vector2::new(0, -1), voxel_pos);
+        } else if voxel_pos.local().z == CHUNK_SIZE - 1 {
+            mark_chunk_part_for_meshing(chunk_manager, Vector2::new(0, 1), voxel_pos);
         }
     }
 }

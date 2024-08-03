@@ -6,7 +6,7 @@ use chunk_part::{chunk_part_mesher::MeshingOutput, ChunkPart, CHUNK_SIZE};
 use dynamic_chunk_mesh::DynamicChunkMesh;
 use wgpu::util::DeviceExt;
 
-use crate::{block::{light::LightLevel, model::FacePacked, Block}, relative_vector::RelVec3};
+use crate::{block::{light::LightLevel, model::FacePacked, Block}, global_vector::GlobalVecF};
 
 use super::PARTS_PER_CHUNK;
 
@@ -71,13 +71,6 @@ impl Chunk {
     pub fn maintain_parts(&mut self) {
         self.compress_parts();
         self.clean_up_parts();
-    }
-
-    pub fn get_light_level_from_relvec(&self, position: RelVec3) -> Option<&LightLevel> {
-        if position.chunk_pos.xz() != self.position { return None; }
-        if position.chunk_pos.y.is_negative() || position.chunk_pos.y >= PARTS_PER_CHUNK as i32 { return None; }
-        let local_position = position.local_pos().map(|f| f.floor() as usize);
-        Some(self.parts[position.chunk_pos.y as usize].light_level_layers.get_light_level(local_position))
     }
 }
 static CHUNK_TRANSLATION_BIND_GROUP_LAYOUT: OnceLock<wgpu::BindGroupLayout> = OnceLock::new();

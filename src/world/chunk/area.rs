@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, mem::MaybeUninit, sync::Arc};
 
 use cgmath::{num_traits::Euclid, Vector2, Vector3};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 
 use crate::{block::{light::{LightLevel, LightNode, LIGHT_LEVEL_MAX_VALUE}, Block}, world::{chunk::chunk_part::{CHUNK_SIZE_I16, CHUNK_SIZE_I32}, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_LIST, BLOCK_MAP, OBSTRUCTS_LIGHT_CACHE};
 
@@ -86,19 +86,19 @@ impl Area {
     #[inline]
     pub fn get_light_level(&self, position: Vector3<i32>) -> Option<&LightLevel> {
         let Some((chunk_part, local_position)) = self.get_chunk_part_and_local_position(position) else { return None; };
-        Some(chunk_part.light_level_layers.get_light_level(local_position))
+        Some(&chunk_part.light_level_layers[local_position])
     }
 
     #[inline]
     pub fn get_sky_light_level(&self, position: Vector3<i32>) -> Option<u8> {
         let Some((chunk_part, local_position)) = self.get_chunk_part_and_local_position(position) else { return None; };
-        Some(chunk_part.light_level_layers.get_light_level(local_position).get_sky())
+        Some(chunk_part.light_level_layers[local_position].get_sky())
     }
 
     #[inline]
     pub fn get_block_light_level(&self, position: Vector3<i32>) -> Option<u8> {
         let Some((chunk_part, local_position)) = self.get_chunk_part_and_local_position(position) else { return None; };
-        Some(chunk_part.light_level_layers.get_light_level(local_position).get_block())
+        Some(chunk_part.light_level_layers[local_position].get_block())
     }
     
     #[inline]
@@ -110,17 +110,13 @@ impl Area {
     #[inline]
     pub fn set_sky_light_level(&mut self, position: Vector3<i32>, level: u8) {
         let Some((chunk_part, local_position)) = self.get_chunk_part_mut_and_local_position(position) else { return; };
-        let mut light_level = *chunk_part.light_level_layers.get_light_level(local_position);
-        light_level.set_sky(level);
-        chunk_part.light_level_layers.set_light_level(local_position, light_level);
+        chunk_part.set_sky_light_level(local_position, level);
     }
 
     #[inline]
     pub fn set_block_light_level(&mut self, position: Vector3<i32>, level: u8) {
         let Some((chunk_part, local_position)) = self.get_chunk_part_mut_and_local_position(position) else { return; };
-        let mut light_level = *chunk_part.light_level_layers.get_light_level(local_position);
-        light_level.set_block(level);
-        chunk_part.light_level_layers.set_light_level(local_position, light_level);
+        chunk_part.set_block_light_level(local_position, level);
     }
 
     pub fn insert_structure(&mut self, structure: &Structure, origin_point: Vector3<i32>) {
@@ -284,11 +280,11 @@ impl Area {
         fn remove_in_direction(area: &mut Area, direction: Vector3<i32>, light_node_position: Vector3<i32>, light_node_level: u8, light_node_removal_queue: &mut VecDeque<LightNode>, light_node_propagation_queue: &mut VecDeque<LightNode>) {
             let neighbor_position= light_node_position + direction;
             let Some(neighbor_sky_light_level) = area.get_sky_light_level(neighbor_position) else { return; };
-            if neighbor_sky_light_level < light_node_level && neighbor_sky_light_level != 0 {
+            if neighbor_sky_light_level == 0 { return; }
+            if neighbor_sky_light_level < light_node_level {
                 area.set_sky_light_level(neighbor_position, 0);
                 light_node_removal_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_sky_light_level));
             } else if neighbor_sky_light_level >= light_node_level {
-                if neighbor_sky_light_level == 0 { return; }
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8 + 1, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_sky_light_level - 1));
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8 + 1, neighbor_sky_light_level - 1));
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8 - 1, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_sky_light_level - 1));
@@ -302,14 +298,14 @@ impl Area {
         fn remove_downwards(area: &mut Area, light_node_position: Vector3<i32>, light_node_level: u8, light_node_removal_queue: &mut VecDeque<LightNode>, light_node_propagation_queue: &mut VecDeque<LightNode>) {
             let neighbor_position= light_node_position + Vector3::new(0, -1, 0);
             let Some(neighbor_sky_light_level) = area.get_sky_light_level(neighbor_position) else { return; };
+            if neighbor_sky_light_level == 0 { return; }
             if neighbor_sky_light_level == LIGHT_LEVEL_MAX_VALUE {
                 area.set_sky_light_level(neighbor_position, 0);
                 light_node_removal_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_sky_light_level));
-            } else if neighbor_sky_light_level < light_node_level && neighbor_sky_light_level != 0 {
+            } else if neighbor_sky_light_level < light_node_level {
                 area.set_sky_light_level(neighbor_position, 0);
                 light_node_removal_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_sky_light_level));
             } else if neighbor_sky_light_level >= light_node_level {
-                if neighbor_sky_light_level == 0 { return; }
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8 + 1, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_sky_light_level - 1));
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8 + 1, neighbor_sky_light_level - 1));
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8 - 1, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_sky_light_level - 1));
@@ -356,7 +352,7 @@ impl Area {
     }
 
     #[inline]
-    pub fn update_block_light_at(&mut self, position: Vector3<i32>) -> Box<[(Vector2<i32>, usize)]> {
+    pub fn remove_block_light_at(&mut self, position: Vector3<i32>) -> Box<[(Vector2<i32>, usize)]> {
         let mut light_node_removal_queue: VecDeque<LightNode> = VecDeque::new();
         let mut light_node_propagation_queue: VecDeque<LightNode> = VecDeque::new();
         
@@ -379,6 +375,91 @@ impl Area {
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8 - 1, neighbor_sky_light_level - 1));
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16 + 1, neighbor_position.z as i8, neighbor_sky_light_level - 1));
                 light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16 - 1, neighbor_position.z as i8, neighbor_sky_light_level - 1));
+            }
+        }
+
+        let mut afflicted_chunk_parts = vec![];
+        while let Some(light_node) = light_node_removal_queue.pop_front() {
+            let light_node_position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
+            let Some((chunk_offset, chunk_part_index)) = self.get_chunk_offset_and_chunk_part_index(light_node_position) else { continue; };
+            let Some(chunk) = self.get_chunk(chunk_offset) else { continue; };
+            afflicted_chunk_parts.push((chunk.position, chunk_part_index));
+
+            remove_in_direction(self, Vector3::new(1, 0, 0), light_node_position, light_node.level, &mut light_node_removal_queue, &mut light_node_propagation_queue);
+            remove_in_direction(self, Vector3::new(0, 1, 0), light_node_position, light_node.level, &mut light_node_removal_queue, &mut light_node_propagation_queue);
+            remove_in_direction(self, Vector3::new(0, 0, 1), light_node_position, light_node.level, &mut light_node_removal_queue, &mut light_node_propagation_queue);
+            remove_in_direction(self, Vector3::new(-1, 0, 0), light_node_position, light_node.level, &mut light_node_removal_queue, &mut light_node_propagation_queue);
+            remove_in_direction(self, Vector3::new(0, -1, 0), light_node_position, light_node.level, &mut light_node_removal_queue, &mut light_node_propagation_queue);
+            remove_in_direction(self, Vector3::new(0, 0, -1), light_node_position, light_node.level, &mut light_node_removal_queue, &mut light_node_propagation_queue);
+        }
+
+        let mut visited_nodes = HashMap::new();
+        while let Some(light_node) = light_node_propagation_queue.pop_front() {
+            let light_node_position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
+            match visited_nodes.entry(((light_node.x as u8 as u32)) | ((light_node.y as u16 as u32) << 8) | ((light_node.z as u8 as u32) << 24)) {
+                hashbrown::hash_map::Entry::Occupied(occupied) => {
+                    let level = *occupied.get();
+                    if light_node.level <= level { continue; }
+                },
+                hashbrown::hash_map::Entry::Vacant(vacant) => {
+                    vacant.insert(light_node.level);
+                }
+            }
+            let Some((chunk_offset, chunk_part_index)) = self.get_chunk_offset_and_chunk_part_index(light_node_position) else { continue; };
+            let Some(chunk) = self.get_chunk(chunk_offset) else { continue; };
+            afflicted_chunk_parts.push((chunk.position, chunk_part_index));
+
+            self.step_block_light_node_propagation(light_node, &mut light_node_propagation_queue);
+        }
+        afflicted_chunk_parts.into_iter().collect()
+    }
+
+    pub fn propagate_block_light_at(&mut self, position: Vector3<i32>) -> Box<[(Vector2<i32>, usize)]> {
+        let mut light_node_queue = VecDeque::new();
+        let Some(block_level) = self.get_block_light_level(position) else { return Box::new([]); };
+        if block_level <= 1 { return Box::new([]); }
+        light_node_queue.push_back(LightNode::new(position.x as i8 + 1, position.y as i16, position.z as i8, block_level - 1));
+        light_node_queue.push_back(LightNode::new(position.x as i8, position.y as i16 + 1, position.z as i8, block_level - 1));
+        light_node_queue.push_back(LightNode::new(position.x as i8, position.y as i16, position.z as i8 + 1, block_level - 1));
+        light_node_queue.push_back(LightNode::new(position.x as i8 - 1, position.y as i16, position.z as i8, block_level - 1));
+        light_node_queue.push_back(LightNode::new(position.x as i8, position.y as i16 - 1, position.z as i8, block_level - 1));
+        light_node_queue.push_back(LightNode::new(position.x as i8, position.y as i16, position.z as i8 - 1, block_level - 1));
+
+        let mut afflicted_chunk_parts = HashSet::new();
+        while let Some(light_node) = light_node_queue.pop_front() {
+            self.step_block_light_node_propagation(light_node, &mut light_node_queue);
+            let light_node_position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
+            let Some((chunk_offset, chunk_part_index)) = self.get_chunk_offset_and_chunk_part_index(light_node_position) else { continue; };
+            let Some(chunk) = self.get_chunk(chunk_offset) else { continue; };
+            afflicted_chunk_parts.insert((chunk.position, chunk_part_index));
+        }
+
+        afflicted_chunk_parts.into_iter().collect()
+    }
+
+    #[inline]
+    pub fn update_block_light_at(&mut self, position: Vector3<i32>) -> Box<[(Vector2<i32>, usize)]> {
+        let mut light_node_removal_queue: VecDeque<LightNode> = VecDeque::new();
+        let mut light_node_propagation_queue: VecDeque<LightNode> = VecDeque::new();
+        
+        let Some(level) = self.get_block_light_level(position) else { return Box::new([]); };
+        light_node_removal_queue.push_back(LightNode::new(position.x as i8, position.y as i16, position.z as i8, level));
+
+        #[inline]
+        fn remove_in_direction(area: &mut Area, direction: Vector3<i32>, light_node_position: Vector3<i32>, light_node_level: u8, light_node_removal_queue: &mut VecDeque<LightNode>, light_node_propagation_queue: &mut VecDeque<LightNode>) {
+            let neighbor_position= light_node_position + direction;
+            let Some(neighbor_block_light_level) = area.get_block_light_level(neighbor_position) else { return; };
+            if neighbor_block_light_level < light_node_level && neighbor_block_light_level != 0 {
+                area.set_block_light_level(neighbor_position, 0);
+                light_node_removal_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_block_light_level));
+            } else if neighbor_block_light_level >= light_node_level {
+                if neighbor_block_light_level == 0 { return; }
+                light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8 + 1, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_block_light_level - 1));
+                light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8 + 1, neighbor_block_light_level - 1));
+                light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8 - 1, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_block_light_level - 1));
+                light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8 - 1, neighbor_block_light_level - 1));
+                light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16 + 1, neighbor_position.z as i8, neighbor_block_light_level - 1));
+                light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16 - 1, neighbor_position.z as i8, neighbor_block_light_level - 1));
             }
         }
 

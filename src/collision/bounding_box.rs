@@ -1,6 +1,6 @@
 use cgmath::Vector3;
 
-use crate::{block::FaceDirection, relative_vector::RelVec3, world::chunk::chunk_part::CHUNK_SIZE};
+use crate::{block::FaceDirection, global_vector::GlobalVecF, world::chunk::chunk_part::CHUNK_SIZE};
 
 #[derive(serde::Deserialize, Debug, Clone, Copy)]
 pub struct LocalBoundingBox {
@@ -18,19 +18,19 @@ impl Default for LocalBoundingBox {
 }
 
 pub struct GlobalBoundingBox {
-    pub start: RelVec3,
-    pub end: RelVec3,
+    pub start: GlobalVecF,
+    pub end: GlobalVecF,
 }
 
 pub struct Ray {
-    pub origin: RelVec3,
+    pub origin: GlobalVecF,
     pub direction: Vector3<f32>,
     pub direction_inverse: Vector3<f32>,
     pub length: f32,
 }
 
 impl Ray {
-    pub fn new(origin: RelVec3, direction: Vector3<f32>, length: f32) -> Self {
+    pub fn new(origin: GlobalVecF, direction: Vector3<f32>, length: f32) -> Self {
         let direction_inverse = direction.map(|f| 1.0 / f);
         Self { origin, direction, length, direction_inverse }
     }
@@ -39,9 +39,9 @@ impl Ray {
 impl GlobalBoundingBox {
     #[inline]
     pub fn ray_intersection(&self, ray: &Ray) -> (f32, f32) {
-        let start = self.start.local_pos() + (self.start.chunk_pos - ray.origin.chunk_pos * CHUNK_SIZE as i32).map(|f| f as f32);
-        let end = self.end.local_pos() + ((self.end.chunk_pos - ray.origin.chunk_pos) * CHUNK_SIZE as i32).map(|f| f as f32);
-        let origin = ray.origin.local_pos();
+        let start = self.start.local() + (self.start.chunk - ray.origin.chunk * CHUNK_SIZE as i32).map(|f| f as f32);
+        let end = self.end.local() + ((self.end.chunk - ray.origin.chunk) * CHUNK_SIZE as i32).map(|f| f as f32);
+        let origin = ray.origin.local();
 
         let mut t_min = 0.0;
         let mut t_max = f32::MAX;
@@ -70,9 +70,9 @@ impl GlobalBoundingBox {
 
     #[inline]
     pub fn ray_intersection_block_face(&self, ray: &Ray) -> Option<FaceDirection> {
-        let start = self.start.local_pos() + ((self.start.chunk_pos - ray.origin.chunk_pos) * CHUNK_SIZE as i32).map(|f| f as f32);
-        let end = self.end.local_pos() + ((self.end.chunk_pos - ray.origin.chunk_pos) * CHUNK_SIZE as i32).map(|f| f as f32);
-        let origin = ray.origin.local_pos();
+        let start = self.start.local() + ((self.start.chunk - ray.origin.chunk) * CHUNK_SIZE as i32).map(|f| f as f32);
+        let end = self.end.local() + ((self.end.chunk - ray.origin.chunk) * CHUNK_SIZE as i32).map(|f| f as f32);
+        let origin = ray.origin.local();
 
         let mut t_min = 0.0;
         let mut t_max = f32::MAX;
@@ -117,7 +117,7 @@ impl GlobalBoundingBox {
     }
 
     #[inline]
-    pub fn intersecting_voxels(&self) -> Vec<RelVec3> {
+    pub fn intersecting_voxels(&self) -> Vec<GlobalVecF> {
         let start_floor = self.start.floor();
         let end_ceil = self.end.ceil();
 
@@ -137,7 +137,7 @@ impl GlobalBoundingBox {
     }
 
     #[inline]
-    pub fn voxels_beneath(&self) -> Vec<RelVec3> {
+    pub fn voxels_beneath(&self) -> Vec<GlobalVecF> {
         let start_floor = self.start.floor();
         let end_ceil = self.end.ceil();
 
@@ -159,9 +159,9 @@ impl GlobalBoundingBox {
 
     #[inline]
     pub fn ray_intersection_block_face_time(&self, ray: &Ray) -> Option<(FaceDirection, f32)> {
-        let start = self.start.local_pos() + ((self.start.chunk_pos - ray.origin.chunk_pos) * CHUNK_SIZE as i32).map(|f| f as f32);
-        let end = self.end.local_pos() + ((self.end.chunk_pos - ray.origin.chunk_pos) * CHUNK_SIZE as i32).map(|f| f as f32);
-        let origin = ray.origin.local_pos();
+        let start = self.start.local() + ((self.start.chunk - ray.origin.chunk) * CHUNK_SIZE as i32).map(|f| f as f32);
+        let end = self.end.local() + ((self.end.chunk - ray.origin.chunk) * CHUNK_SIZE as i32).map(|f| f as f32);
+        let origin = ray.origin.local();
 
         let mut t_min = f32::MIN;
         let mut t_max = f32::MAX;
@@ -209,22 +209,22 @@ impl GlobalBoundingBox {
 
     #[inline]
     pub fn intersects_bounding_box(&self, other: GlobalBoundingBox) -> bool {
-        let start_chunk_pos = self.start.chunk_pos;
-        let start = self.start.local_pos();
+        let start_chunk_pos = self.start.chunk;
+        let start = self.start.local();
         let end: Vector3<f32> = {
             let mut end = self.end;
-            end.chunk_pos -= start_chunk_pos;
+            end.chunk -= start_chunk_pos;
             end.into()
         };
 
         let other_start: Vector3<f32> = {
             let mut other_start = other.start;
-            other_start.chunk_pos -= start_chunk_pos;
+            other_start.chunk -= start_chunk_pos;
             other_start.into()
         };
         let other_end: Vector3<f32> = {
             let mut other_end = other.end;
-            other_end.chunk_pos -= start_chunk_pos;
+            other_end.chunk -= start_chunk_pos;
             other_end.into()
         };
 

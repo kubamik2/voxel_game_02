@@ -95,7 +95,7 @@ pub struct Properties {
     pub obstructs_light: bool,
 
     #[serde(default = "u8_0")]
-    pub emmited_light: u8,
+    pub emitted_light: u8,
 }
 
 const fn bool_true() -> bool {
@@ -118,7 +118,7 @@ impl Default for Properties {
             replaceable: false,
             collideable: true,
             obstructs_light: true,
-            emmited_light: 0,
+            emitted_light: 0,
         }
     }
 }
@@ -154,7 +154,7 @@ pub enum FaceDirection {
 }
 
 impl FaceDirection {
-    pub const fn normal(&self) -> Vector3<f32> {
+    pub const fn normal_f32(&self) -> Vector3<f32> {
         match self {
             Self::PositiveX => Vector3 { x: 1.0, y: 0.0, z: 0.0 },
             Self::NegativeX => Vector3 { x: -1.0, y: 0.0, z: 0.0 },
@@ -162,6 +162,17 @@ impl FaceDirection {
             Self::NegativeZ => Vector3 { x: 0.0, y: 0.0, z: -1.0 },
             Self::PositiveY => Vector3 { x: 0.0, y: 1.0, z: 0.0 },
             Self::NegativeY => Vector3 { x: 0.0, y: -1.0, z: 0.0 },
+        }
+    }
+
+    pub const fn normal_i32(&self) -> Vector3<i32> {
+        match self {
+            Self::PositiveX => Vector3 { x: 1, y: 0, z: 0 },
+            Self::NegativeX => Vector3 { x: -1, y: 0, z: 0 },
+            Self::PositiveZ => Vector3 { x: 0, y: 0, z: 1 },
+            Self::NegativeZ => Vector3 { x: 0, y: 0, z: -1 },
+            Self::PositiveY => Vector3 { x: 0, y: 1, z: 0 },
+            Self::NegativeY => Vector3 { x: 0, y: -1, z: 0 },
         }
     }
 }

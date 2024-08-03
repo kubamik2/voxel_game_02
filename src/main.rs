@@ -10,7 +10,7 @@ mod state;
 mod game_window;
 mod settings;
 mod camera;
-mod relative_vector;
+mod global_vector;
 mod world;
 mod block;
 mod texture;
@@ -20,6 +20,8 @@ mod render_thread;
 mod renderable;
 mod thread_work_dispatcher;
 mod gui;
+
+// pub static DEBUG_GUI: 
 
 lazy_static::lazy_static! {
     pub static ref BASE_MODELS: block::asset_loader::BaseQuadBlockModels = block::asset_loader::load_models("./assets/models").unwrap();
@@ -43,32 +45,33 @@ lazy_static::lazy_static! {
 
     pub static ref STRUCTURES: HashMap<String, Structure> = {
         let mut structures = HashMap::new();
-        let cobblestone: Block = BLOCK_MAP.get("cobblestone").unwrap().clone().into();
+        let oak_log: Block = BLOCK_MAP.get("oak_log").unwrap().clone().into();
+        let oak_leaves: Block = BLOCK_MAP.get("oak_leaves").unwrap().clone().into();
 
         structures.insert("tree".to_string(), Structure {
             blocks: vec![
-                (Vector3::new(0, 0, 0), cobblestone.clone()),
-                (Vector3::new(0, 1, 0), cobblestone.clone()),
-                (Vector3::new(0, 2, 0), cobblestone.clone()),
-                (Vector3::new(0, 3, 0), cobblestone.clone()),
-                (Vector3::new(1, 3, 0), cobblestone.clone()),
-                (Vector3::new(0, 3, 1), cobblestone.clone()),
-                (Vector3::new(1, 3, 1), cobblestone.clone()),
-                (Vector3::new(-1, 3, 0), cobblestone.clone()),
-                (Vector3::new(0, 3, -1), cobblestone.clone()),
-                (Vector3::new(-1, 3, -1), cobblestone.clone()),
-                (Vector3::new(1, 3, -1), cobblestone.clone()),
-                (Vector3::new(-1, 3, 1), cobblestone.clone()),
-                (Vector3::new(0, 4, 0), cobblestone.clone()),
-                (Vector3::new(1, 4, 0), cobblestone.clone()),
-                (Vector3::new(0, 4, 1), cobblestone.clone()),
-                (Vector3::new(1, 4, 1), cobblestone.clone()),
-                (Vector3::new(-1, 4, 0), cobblestone.clone()),
-                (Vector3::new(0, 4, -1), cobblestone.clone()),
-                (Vector3::new(-1, 4, -1), cobblestone.clone()),
-                (Vector3::new(1, 4, -1), cobblestone.clone()),
-                (Vector3::new(-1, 4, 1), cobblestone.clone()),
-                (Vector3::new(0, 5, 0), cobblestone.clone()),
+                (Vector3::new(0, 0, 0), oak_log.clone()),
+                (Vector3::new(0, 1, 0), oak_log.clone()),
+                (Vector3::new(0, 2, 0), oak_log.clone()),
+                (Vector3::new(0, 3, 0), oak_leaves.clone()),
+                (Vector3::new(1, 3, 0), oak_leaves.clone()),
+                (Vector3::new(0, 3, 1), oak_leaves.clone()),
+                (Vector3::new(1, 3, 1), oak_leaves.clone()),
+                (Vector3::new(-1, 3, 0), oak_leaves.clone()),
+                (Vector3::new(0, 3, -1), oak_leaves.clone()),
+                (Vector3::new(-1, 3, -1), oak_leaves.clone()),
+                (Vector3::new(1, 3, -1), oak_leaves.clone()),
+                (Vector3::new(-1, 3, 1), oak_leaves.clone()),
+                (Vector3::new(0, 4, 0), oak_leaves.clone()),
+                (Vector3::new(1, 4, 0), oak_leaves.clone()),
+                (Vector3::new(0, 4, 1), oak_leaves.clone()),
+                (Vector3::new(1, 4, 1), oak_leaves.clone()),
+                (Vector3::new(-1, 4, 0), oak_leaves.clone()),
+                (Vector3::new(0, 4, -1), oak_leaves.clone()),
+                (Vector3::new(-1, 4, -1), oak_leaves.clone()),
+                (Vector3::new(1, 4, -1), oak_leaves.clone()),
+                (Vector3::new(-1, 4, 1), oak_leaves.clone()),
+                (Vector3::new(0, 5, 0), oak_leaves.clone()),
             ]
         });
 

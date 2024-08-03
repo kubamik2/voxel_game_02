@@ -61,12 +61,51 @@ struct RenderThreadInner {
     work_done_sender: Sender<()>,
     egui_renderer: EguiRenderer,
     window: Arc<winit::window::Window>,
+    light_map_texture: Texture,
+    light_map_bind_group: wgpu::BindGroup,
 }
 
 impl RenderThreadInner {
     fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>, window: Arc<winit::window::Window>) -> Self {
         let depth_texture = Texture::create_depth_texture(&device, &surface_config, "depth texture");
         let texture_atlas = TextureAtlas::new("./assets/atlases/block_01.png", &device, &queue);
+        let light_map_texture = Texture::from_bytes(&device, &queue, include_bytes!("../assets/atlases/light_map.png"), "light_map").unwrap();
+        let light_map_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("light_map bind group layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    count: None,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    visibility: wgpu::ShaderStages::VERTEX,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    count: None,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    visibility: wgpu::ShaderStages::VERTEX,
+                }
+            ]
+        });
+
+        let light_map_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("light_map bind group"),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&light_map_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&light_map_texture.sampler),
+                }
+            ],
+            layout: &light_map_bind_group_layout,
+        });
 
         const INDICES: &[u32] = &[0, 1, 2,  1, 3, 2];
         let mut indices = vec![];
@@ -91,6 +130,7 @@ impl RenderThreadInner {
                 QuadBuffer::get_or_init_bind_group_layout(&device),
                 TextureAtlas::get_or_init_bind_group_layout(&device),
                 crate::world::chunk::ChunkTranslation::get_or_init_bind_group_layout(&device),
+                &light_map_bind_group_layout,
             ],
             push_constant_ranges: &[],
         });
@@ -147,13 +187,13 @@ impl RenderThreadInner {
 
         let egui_renderer = EguiRenderer::new(&window, &surface_config, &device);
 
-        Self { device, queue, depth_texture, texture_atlas, index_buffer, quad_buffer, view_projection, render_pipeline, work_done_sender, egui_renderer, window }
+        Self { device, queue, depth_texture, texture_atlas, index_buffer, quad_buffer, view_projection, render_pipeline, work_done_sender, egui_renderer, window, light_map_texture, light_map_bind_group }
     }
 
     fn render(&mut self, args: RenderArgs) {
         let output = args.surface.get_current_texture().unwrap();
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render_encoder")} );
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render_thread encoder")} );
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("render_pass"),
@@ -178,6 +218,7 @@ impl RenderThreadInner {
             render_pass.set_bind_group(0, self.view_projection.bind_group(), &[]);
             render_pass.set_bind_group(2, self.quad_buffer.bind_group(), &[]);
             render_pass.set_bind_group(3, self.texture_atlas.bind_group(), &[]);
+            render_pass.set_bind_group(5, &self.light_map_bind_group, &[]);
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             for mesh in args.meshes.iter() {
                 if !mesh.parts_meshed.iter().cloned().all(|f| f) { continue; }
@@ -213,6 +254,6 @@ impl RenderThreadInner {
 
         args.game_window.window().pre_present_notify();
         output.present();
-        self.work_done_sender.send(());
+        self.work_done_sender.send(()).expect("render_thread work_done_sender.send() failed");
     }
 }

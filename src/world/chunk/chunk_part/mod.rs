@@ -21,6 +21,8 @@ pub struct ChunkPart {
     pub block_layers: BlockLayers,
     pub light_level_layers: LightLevelLayers,
     pub light_emitters: Vec<LightNode>,
+    pub added_light_emitters: Vec<Vector3<usize>>,
+    pub removed_light_emitters: Vec<Vector3<usize>>,
 }
 
 impl ChunkPart {
@@ -28,7 +30,7 @@ impl ChunkPart {
         let block_pallet = BlockPallet::new_air();
         let block_layers = BlockLayers::new_uncompressed();
         let light_level_layers = LightLevelLayers::new_uncompressed();
-        Self { block_layers, block_pallet, light_level_layers, light_emitters: vec![] }
+        Self { block_layers, block_pallet, light_level_layers, light_emitters: vec![], added_light_emitters: vec![], removed_light_emitters: vec![] }
     }
 
     fn position_in_bounds(local_position: Vector3<usize>) -> bool {
@@ -87,61 +89,31 @@ impl ChunkPart {
         &self.block_pallet.get(block_pallet_id).unwrap_unchecked().block
     }
 
-    // pub fn clear_light(&mut self) {
-    //     self.light_level_layers = LightLevelLayers::new_uncompressed();
-    // }
+    #[inline]
+    pub fn get_block_light_level(&self, local_position: Vector3<usize>) -> Option<u8> {
+        let light_level = self.light_level_layers.get_light_level(local_position)?;
+        Some(light_level.get_block())
+    }
 
-    // #[inline]
-    // pub fn propagate_block_light(&mut self, light_emmiters: &[LightNode]) {
-    //     let max_block_pallet_id = self.block_pallet.max_key().unwrap();
-    //     let mut obstructs_light_cache = vec![None; max_block_pallet_id as usize + 1];
+    #[inline]
+    pub fn set_block_light_level(&mut self, local_position: Vector3<usize>, level: u8) {
+        let Some(mut light_level) = self.light_level_layers.get_light_level(local_position).cloned() else { return; };
+        light_level.set_block(level);
+        self.light_level_layers.set_light_level(local_position, light_level);
+    }
 
-    //     for (id, item) in self.block_pallet.iter() {
-    //         let obstructs_light = BLOCK_MAP.get(item.block.name()).unwrap().properties().obstructs_light;
-    //         obstructs_light_cache[id as usize] = Some(obstructs_light);
-    //     }
+    #[inline]
+    pub fn get_sky_light_level(&self, local_position: Vector3<usize>) -> Option<u8> {
+        let light_level = self.light_level_layers.get_light_level(local_position)?;
+        Some(light_level.get_sky())
+    }
 
-    //     let mut light_node_queue = std::collections::VecDeque::with_capacity(self.light_emmiters.len());
-    //     light_node_queue.extend(light_emmiters.iter().cloned());
-
-    //     while let Some(light_node) = light_node_queue.pop_front() {
-    //         let Some(block_pallet_id) = self.block_layers.get_block_pallet_id(light_node.position).cloned() else { continue; };
-    //         let obstructs_light = obstructs_light_cache[block_pallet_id as usize].expect("propagate_block_light obstructs_light id not cached");
-    //         if obstructs_light { continue; }
-
-    //         let mut current_light_level = *self.light_level_layers.get_light_level(light_node.position);
-    //         if light_node.level <= current_light_level.get_block() { continue; }
-
-    //         current_light_level.set_block(light_node.level);
-    //         self.light_level_layers.set_light_level(light_node.position, current_light_level);
-    //         if light_node.level == 1 { continue; }
-    //         let new_level = light_node.level - 1;
-
-    //         if light_node.position.x < CHUNK_SIZE - 1 {
-    //             light_node_queue.push_back(LightNode::new(light_node.position + Vector3::unit_x(), new_level));
-    //         }
-
-    //         if light_node.position.y < CHUNK_SIZE - 1 {
-    //             light_node_queue.push_back(LightNode::new(light_node.position + Vector3::unit_y(), new_level));
-    //         }
-
-    //         if light_node.position.z < CHUNK_SIZE - 1 {
-    //             light_node_queue.push_back(LightNode::new(light_node.position + Vector3::unit_z(), new_level));
-    //         }
-
-    //         if light_node.position.x > 0 {
-    //             light_node_queue.push_back(LightNode::new(light_node.position - Vector3::unit_x(), new_level));
-    //         }
-
-    //         if light_node.position.y > 0 {
-    //             light_node_queue.push_back(LightNode::new(light_node.position - Vector3::unit_y(), new_level));
-    //         }
-
-    //         if light_node.position.z > 0 {
-    //             light_node_queue.push_back(LightNode::new(light_node.position - Vector3::unit_z(), new_level));
-    //         }
-    //     }
-    // }
+    #[inline]
+    pub fn set_sky_light_level(&mut self, local_position: Vector3<usize>, level: u8) {
+        let Some(mut light_level) = self.light_level_layers.get_light_level(local_position).cloned() else { return; };
+        light_level.set_sky(level);
+        self.light_level_layers.set_light_level(local_position, light_level);
+    }
 }
 
 #[derive(Clone)]
@@ -278,15 +250,31 @@ impl LightLevelLayers {
     }
 
     #[inline]
-    pub fn get_light_level(&self, local_position: Vector3<usize>) -> &LightLevel { // TODO should return Option
+    pub fn get_light_level(&self, local_position: Vector3<usize>) -> Option<&LightLevel> {
         assert!(local_position.x < CHUNK_SIZE && local_position.y < CHUNK_SIZE && local_position.z < CHUNK_SIZE);
         let layer = &self.0[local_position.y];
         match layer {
             LightLevelLayer::Uncompressed(light_levels) => {
-                &light_levels[local_position.x + local_position.z * CHUNK_SIZE]
+                Some(&light_levels[local_position.x + local_position.z * CHUNK_SIZE])
             },
             LightLevelLayer::Compressed(layer_light_level) => {
-                layer_light_level
+                Some(layer_light_level)
+            }
+        }
+    }
+}
+
+impl Index<Vector3<usize>> for LightLevelLayers {
+    type Output = LightLevel;
+    #[inline]
+    fn index(&self, index: Vector3<usize>) -> &Self::Output {
+        let layer = &self.0[index.y];
+        match layer {
+            LightLevelLayer::Uncompressed(light_levels) => {
+                &light_levels[index.x + index.z * CHUNK_SIZE]
+            },
+            LightLevelLayer::Compressed(light_level) => {
+                light_level
             }
         }
     }

@@ -1,7 +1,7 @@
 {
     "variants": [
         {
-            "applied_model": "lamp",
+            "applied_model": "oak_leaves",
             "required_state": [
                 
             ],
@@ -16,7 +16,7 @@
         }
     ],
     "properties": {
-        "obstructs_light": false,
-        "emitted_light": 15
+        "alpha_mode": "Transparent",
+        "obstructs_light": false
     }
 }

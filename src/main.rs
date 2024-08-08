@@ -2,11 +2,11 @@
 use block::{asset_loader::{BlockList, BlockMap}, model::{BlockModelVariants, QuadRaw}, Block};
 use cgmath::Vector3;
 use hashbrown::HashMap;
-use state::State;
+use application::Application;
 use world::structure::Structure;
 use std::sync::{Arc, Mutex};
 
-mod state;
+mod application;
 mod game_window;
 mod settings;
 mod camera;
@@ -17,9 +17,10 @@ mod texture;
 mod collision;
 mod interval;
 mod render_thread;
-mod renderable;
 mod thread_work_dispatcher;
 mod gui;
+mod layer;
+mod event;
 
 // pub static DEBUG_GUI: 
 
@@ -80,5 +81,5 @@ lazy_static::lazy_static! {
 }
 
 fn main() -> anyhow::Result<()> {
-    State::run("./settings.json")
+    Application::run("./settings.json")
 }

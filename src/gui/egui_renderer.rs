@@ -1,10 +1,9 @@
 use std::io::Read;
 
-use egui::Color32;
+use egui::{Color32, FullOutput, RawInput};
 
 pub struct EguiRenderer {
     pub context: egui::Context,
-    pub state: egui_winit::State,
     pub renderer: egui_wgpu::Renderer
 }
 
@@ -14,22 +13,18 @@ impl EguiRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        window: &winit::window::Window,
         window_surface_view: &wgpu::TextureView,
         screen_descriptor: egui_wgpu::ScreenDescriptor,
+        raw_input: RawInput,
         run_ui: impl FnOnce(&egui::Context),
-    ) {
-        let raw_input = self.state.take_egui_input(&window);
+    ) -> FullOutput {
         let full_output = self.context.run(raw_input, |_| {
             run_ui(&self.context);
         });
 
-        self.state
-            .handle_platform_output(&window, full_output.platform_output);
-
         let tris = self
             .context
-            .tessellate(full_output.shapes, full_output.pixels_per_point);
+            .tessellate(full_output.shapes.clone(), full_output.pixels_per_point);
         for (id, image_delta) in &full_output.textures_delta.set {
             self.renderer
                 .update_texture(&device, &queue, *id, &image_delta);
@@ -55,38 +50,38 @@ impl EguiRenderer {
         for x in &full_output.textures_delta.free {
             self.renderer.free_texture(x)
         }
+
+        full_output
     }
 
-    pub fn new(window: &winit::window::Window, config: &wgpu::SurfaceConfiguration, device: &wgpu::Device) -> Self {
+    pub fn new(config: &wgpu::SurfaceConfiguration, device: &wgpu::Device) -> Self {
         let visuals = egui::Visuals {
-            window_fill: Color32::from_rgb(0, 0, 0),
+            // window_fill: Color32::from_rgb(0, 0, 0),
             faint_bg_color: Color32::TRANSPARENT,
             extreme_bg_color: Color32::TRANSPARENT,
             panel_fill: Color32::TRANSPARENT,
             window_shadow: egui::epaint::Shadow::NONE,
-            window_rounding: egui::Rounding::same(2.0),
-            window_stroke: egui::Stroke::NONE,
+            window_rounding: egui::Rounding::same(0.0),
+            // window_stroke: egui::Stroke::NONE,
             ..Default::default()
         };
 
         let ctx = egui::Context::default();
         ctx.set_visuals(visuals);
 
-        // if let Ok(mut file) = std::fs::File::open("custom_font.ttf") {
-        //     let mut bytes = vec![];
-        //     if let Ok(_) = file.read_to_end(&mut bytes) {
-        //         let mut fonts = egui::FontDefinitions::default();
-        //         fonts.font_data.insert("custom_font".to_string(), egui::FontData::from_owned(bytes));
-        //         fonts.families.get_mut(&egui::FontFamily::Proportional).unwrap().insert(0, "custom_font".to_string());
-        //         ctx.set_fonts(fonts);
-        //     }
-        // }
+        if let Ok(mut file) = std::fs::File::open("./assets/fonts/minecraft.ttf") {
+            let mut bytes = vec![];
+            if let Ok(_) = file.read_to_end(&mut bytes) {
+                let mut fonts = egui::FontDefinitions::default();
+                fonts.font_data.insert("minecraft".to_string(), egui::FontData::from_owned(bytes));
+                fonts.families.get_mut(&egui::FontFamily::Proportional).unwrap().insert(0, "minecraft".to_string());
+                ctx.set_fonts(fonts);
+            }
+        }
         
 
-        let viewport_id = ctx.viewport_id();
-        let egui_state = egui_winit::State::new(ctx.clone(), viewport_id, &window, None, None);
         let renderer = egui_wgpu::Renderer::new(&device, config.format, None, 1);
         
-        Self { context: ctx, state: egui_state, renderer }
+        Self { context: ctx, renderer }
     }
 }

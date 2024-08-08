@@ -17,6 +17,8 @@ pub mod chunk_mesh_map;
 pub mod chunk_manager;
 pub mod chunk_generator;
 pub mod area;
+pub mod chunk_layer;
+pub mod chunk_rendering_layer;
 
 #[derive(Clone)]
 pub struct Chunk {
@@ -36,7 +38,7 @@ impl Chunk {
         }
     }
 
-    pub fn get_block_from_world(&self, position: Vector3<usize>) -> Option<&Block> {
+    pub fn get_block_chunk_local(&self, position: Vector3<usize>) -> Option<&Block> {
         let chunk_part_index = position.y.div_euclid(CHUNK_SIZE);
         if chunk_part_index >= PARTS_PER_CHUNK { return None; }
 
@@ -45,7 +47,7 @@ impl Chunk {
         part.get_block(position_in_chunk_part)
     }
 
-    pub fn set_block_from_world(&mut self, position: Vector3<usize>, block: Block) {
+    pub fn set_block_chunk_local(&mut self, position: Vector3<usize>, block: Block) {
         let chunk_part_index = position.y.div_euclid(CHUNK_SIZE);
         if chunk_part_index >= PARTS_PER_CHUNK { return; }
 

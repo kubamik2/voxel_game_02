@@ -1,7 +1,7 @@
 {
     "variants": [
         {
-            "applied_model": "lamp",
+            "applied_model": "torch",
             "required_state": [
                 
             ],
@@ -9,14 +9,15 @@
             "rotation": [0.0, 0.0, 0.0],
             "hitboxes": [
                 {
-                    "start": [0.0, 0.0, 0.0],
-                    "end": [1.0, 1.0, 1.0]
+                    "start": [0.4375, 0.0, 0.4375],
+                    "end": [0.5625, 0.625, 0.5625]
                 }
             ]
         }
     ],
     "properties": {
         "obstructs_light": false,
-        "emitted_light": 15
+        "emitted_light": 15,
+        "alpha_mode": "Transparent"
     }
 }

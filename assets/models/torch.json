@@ -1,0 +1,78 @@
+{
+    "cuboids": [
+        {
+            "start": [0.4375, 0.0, 0.4375],
+            "end": [0.5625, 0.625, 0.5625],
+            "faces": [
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [0.125, 0.375],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [0.125, 0.375],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [0.125, 0.375],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [0.125, 0.375],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                {
+                    "uv_start": [0.0, 0.375],
+                    "uv_end": [0.125, 0.25],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [0.125, 0.875],
+                    "texture_index": 12,
+                    "culling": true
+                }
+            ]
+        },
+        {
+            "start": [0.4375, 0.625, 0.4375],
+            "end": [0.5625, 0.75, 0.5625],
+            "faces": [
+                {
+                    "uv_start": [0.0, 0.25],
+                    "uv_end": [0.125, 0.125],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                {
+                    "uv_start": [0.0, 0.25],
+                    "uv_end": [0.125, 0.125],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                {
+                    "uv_start": [0.0, 0.25],
+                    "uv_end": [0.125, 0.125],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                {
+                    "uv_start": [0.0, 0.25],
+                    "uv_end": [0.125, 0.125],
+                    "texture_index": 12,
+                    "culling": false
+                },
+                null,
+                null
+            ]
+        }
+    ]
+}

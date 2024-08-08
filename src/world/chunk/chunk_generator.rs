@@ -128,19 +128,17 @@ impl ChunkGenerator {
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
                     let position = Vector3::new(x, y, z);
-                    if let Some(block) = center_chunk.get_block_from_world(position) {
+                    if let Some(block) = center_chunk.get_block_chunk_local(position) {
                         if block.name() == "air" { continue; }
                     }
 
                     let air_on_top = {
-                        let Some(block) = center_chunk.get_block_from_world(position + Vector3::unit_y()) else { continue; };
+                        let Some(block) = center_chunk.get_block_chunk_local(position + Vector3::unit_y()) else { continue; };
                         block.name() == "air"
                     };
 
                     if air_on_top {
-                        center_chunk.set_block_from_world(position, grass.clone());
-                        // let chunk_part_index = y / CHUNK_SIZE;
-                        // center_chunk.parts[chunk_part_index].light_emitters.push(LightNode::new(x as i8, y as i16, z as i8, 15));
+                        center_chunk.set_block_chunk_local(position, grass.clone());
                     }
                 }
             }

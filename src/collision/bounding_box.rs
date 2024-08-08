@@ -22,6 +22,29 @@ pub struct GlobalBoundingBox {
     pub end: GlobalVecF,
 }
 
+impl GlobalBoundingBox {
+    pub fn test_outline(&self) {
+        use lyon_tessellation::path::Path;
+        use lyon_tessellation::geom::point;
+        use lyon_tessellation::math::Point;
+        use lyon_tessellation::VertexBuffers;
+        let mut path_builder = Path::builder();
+        path_builder.begin(point(self.start.local().x, self.start.local().y));
+        
+        path_builder.end(false);
+        let path = path_builder.build();
+        let mut buffers: VertexBuffers<Point, u16> = VertexBuffers::new();
+        {
+            let mut vertex_builder = lyon_tessellation::geometry_builder::simple_builder(&mut buffers);
+            let mut tesselator = lyon_tessellation::StrokeTessellator::new();
+            let mut stroke_options = lyon_tessellation::StrokeOptions::default();
+            stroke_options = stroke_options.with_line_width(2.0);
+
+            tesselator.tessellate(&path, &stroke_options, &mut vertex_builder).unwrap();
+        }
+    }
+}
+
 pub struct Ray {
     pub origin: GlobalVecF,
     pub direction: Vector3<f32>,

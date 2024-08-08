@@ -4,9 +4,9 @@ use cgmath::{Point3, Vector2, Vector3};
 use wgpu::{util::DeviceExt, Device, Features, Queue};
 use winit::{event::{DeviceEvent, Event, WindowEvent}, event_loop::EventLoop};
 
-use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, gui::Gui, interval::{Interval, IntervalThread}, global_vector::GlobalVecF, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{area::Area, chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE, CHUNK_SIZE_I32}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MAP, BLOCK_MODEL_VARIANTS, QUADS};
+use crate::{block::quad_buffer::QuadBuffer, camera::Camera, game_window::GameWindow, global_vector::GlobalVecF, gui::{Gui}, interval::{Interval, IntervalThread}, render_thread::{RenderArgs, RenderEvent, RenderThread}, settings::Settings, texture::{Texture, TextureAtlas}, world::{chunk::{area::Area, chunk_manager::ChunkManager, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE, CHUNK_SIZE_I32}, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, BLOCK_MAP, BLOCK_MODEL_VARIANTS, QUADS};
 
-pub struct State {
+pub struct Application {
     game_window: GameWindow,
 
     settings: Settings,
@@ -24,10 +24,11 @@ pub struct State {
 
     chunk_manager: ChunkManager,
 
-    now: std::time::Instant,
+    alt_pressed: bool,
+    egui_winit_state: egui_winit::State,
 }
 
-impl State {
+impl Application {
     pub async fn new(settings_path: &std::path::Path) -> anyhow::Result<(Self, EventLoop<()>)> {
         let settings = Settings::from_file(settings_path)?;
         let settings_last_modified = std::fs::metadata(settings_path)?.modified()?;
@@ -84,6 +85,9 @@ impl State {
         let queue = Arc::new(queue);
         
         let chunk_manager = ChunkManager::new(10, 12, 12);
+        let ctx = egui::Context::default();
+        let viewport_id = ctx.viewport_id();
+        let egui_winit_state = egui_winit::State::new(ctx, viewport_id, &game_window.window(), None, None);
         Ok((
             Self {
                 game_window,
@@ -97,7 +101,8 @@ impl State {
                 settings_path: settings_path.to_owned(),
                 camera,
                 chunk_manager,
-                now: std::time::Instant::now(),
+                alt_pressed: false,
+                egui_winit_state,
             }, 
             event_loop,
         ))
@@ -122,11 +127,11 @@ impl State {
 
     pub fn run<T: Into<std::path::PathBuf>>(settings_path: T) -> anyhow::Result<()> {
         let settings_path = settings_path.into();
-        let (mut state, event_loop) = pollster::block_on(Self::new(&settings_path))?;
+        let (mut app, event_loop) = pollster::block_on(Self::new(&settings_path))?;
         
         let mut last_render_instant = std::time::Instant::now();
 
-        let render_thread = RenderThread::new(state.device.clone(), state.queue.clone(), state.surface_config.clone(), state.game_window.window_arc().clone());
+        let render_thread = RenderThread::new(app.device.clone(), app.queue.clone(), app.surface_config.clone(), app.game_window.window_arc().clone());
         let mut interval_300hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 300.0));
         let mut interval_60hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 60.0));
         let mut interval_2hz = Interval::new(std::time::Duration::from_secs_f32(1.0 / 2.0));
@@ -136,108 +141,113 @@ impl State {
 
             if let Ok(settings_file_metadata) = std::fs::metadata(&settings_path) {
                 if let Ok(settings_last_modified_new) = settings_file_metadata.modified() {
-                    if state.settings_last_modified != settings_last_modified_new {
+                    if app.settings_last_modified != settings_last_modified_new {
                         if let Ok(new_settings) = Settings::from_file(&settings_path) {
-                            state.settings = new_settings;
-                            state.settings_last_modified = settings_last_modified_new;
+                            app.settings = new_settings;
+                            app.settings_last_modified = settings_last_modified_new;
                         }
                     }
                 }
             }
 
-            if render_thread.work_done_receiver.try_recv().is_ok() {
-                state.game_window.window().request_redraw();
+            if let Ok(full_output) = render_thread.work_done_receiver.try_recv() {
+                app.egui_winit_state.handle_platform_output(&app.game_window.window(), full_output.platform_output);
+                app.game_window.window().request_redraw();
             }
 
             interval_300hz.tick(|| {
-                while let Some(changed_block_position) = state.chunk_manager.changed_blocks.pop() {
-                    let mut afflicted_chunk_parts = vec![];
-                    let Some(chunk_part) = state.chunk_manager.chunk_map.get_mut_chunk_part(changed_block_position.chunk) else { continue; };
+                app.chunk_manager.update(&app.device);
+            });
+
+            interval_60hz.tick(|| {
+                while let Some(changed_block_position) = app.chunk_manager.changed_blocks.pop() {
+                    let mut afflicted_chunk_parts = hashbrown::HashSet::new();
+                    let Some(chunk_part) = app.chunk_manager.chunk_map.get_mut_chunk_part(changed_block_position.chunk) else { continue; };
                     
                     let mut removed_light_emitters = std::mem::take(&mut chunk_part.removed_light_emitters);
                     let mut added_light_emitters = std::mem::take(&mut chunk_part.added_light_emitters);
 
-                    let Some(mut area) = Area::new(&mut state.chunk_manager.chunk_map, changed_block_position.chunk.xz()) else { continue; };
-                    afflicted_chunk_parts.extend(area.update_sky_light_at(changed_block_position.local().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0)));
-                    afflicted_chunk_parts.extend(area.update_block_light_at(changed_block_position.local().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0)));
+                    let Some(mut area) = Area::new(&mut app.chunk_manager.chunk_map, changed_block_position.chunk.xz()) else { continue; };
+                    area.update_sky_light_at(changed_block_position.local().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0), &mut afflicted_chunk_parts);
+                    area.update_block_light_at(changed_block_position.local().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0), &mut afflicted_chunk_parts);
                     
                     while let Some(light_local_position) = removed_light_emitters.pop() {
                         let area_position = light_local_position.map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0);
-                        afflicted_chunk_parts.extend(area.remove_block_light_at(area_position));
+                        area.remove_block_light_at(area_position, &mut afflicted_chunk_parts);
                     }
 
                     while let Some(light_local_position) = added_light_emitters.pop() {
                         let area_position = light_local_position.map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0);
-                        afflicted_chunk_parts.extend(area.propagate_block_light_at(area_position));
+                        area.propagate_block_light_at(area_position, &mut afflicted_chunk_parts);
                     }
 
                     for chunk in area.chunks {
-                        state.chunk_manager.chunk_map.insert_arc(chunk.position, chunk);
+                        app.chunk_manager.chunk_map.insert_arc(chunk.position, chunk);
                     }
 
                     for (chunk_position, chunk_part_index) in afflicted_chunk_parts {
-                        let Some(mesh) = state.chunk_manager.chunk_mesh_map.get_mut(chunk_position) else { continue; };
+                        let Some(mesh) = app.chunk_manager.chunk_mesh_map.get_mut(chunk_position) else { continue; };
                         mesh.parts_need_meshing[chunk_part_index] = true;
                     }
                 }
-                state.chunk_manager.update(&state.device);
+                app.chunk_manager.insert_chunks_around_player(Vector2::new(0, 0));
+                app.camera.modify_block(&mut app.chunk_manager, BLOCK_MAP.get("torch").unwrap().clone().into());
             });
-
-            interval_60hz.tick(|| {
-                state.chunk_manager.insert_chunks_around_player(Vector2::new(0, 0));
-                state.camera.modify_block(&mut state.chunk_manager, BLOCK_MAP.get("lamp").unwrap().clone().into());
-            });
-
-            // interval_2hz.tick(|| {
-            //     let rel_vec = RelVec3::from(Vector3::new(state.camera.camera_position().x, state.camera.camera_position().y, state.camera.camera_position().z));
-            //     let local_pos = rel_vec.local_pos().map(|f| f.floor() as usize);
-            //     let Some(chunk) = state.chunk_manager.chunk_map.get(rel_vec.chunk_pos().xz()) else { return; };
-            //     if rel_vec.chunk_pos().y < 0 || rel_vec.chunk_pos().y >= PARTS_PER_CHUNK as i32 { return; }
-            //     let highest_block = chunk.highest_blocks[local_pos.x + local_pos.z * CHUNK_SIZE];
-            //     // println!("chunk: {:?},  local: {:?},  high: {:?}, sky: {}", rel_vec.chunk_pos(), local_pos, highest_block, chunk.parts[rel_vec.chunk_pos().y as usize].light_level_layers.get_light_level(local_pos).get_sky());
-            // });
 
             match event {
-                Event::WindowEvent { window_id, event } => {
+                Event::WindowEvent { event, .. } => {
+                    if app.alt_pressed {
+                        app.egui_winit_state.on_window_event(&app.game_window.window(), &event);
+                    }
                     match event {
                         WindowEvent::CloseRequested | WindowEvent::KeyboardInput { event: winit::event::KeyEvent { physical_key: winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape), .. }, .. } => {
                             elwt.exit();
                         },
                         WindowEvent::RedrawRequested => {
-                            if state.game_window.window().has_focus() {
-                                state.game_window.window().set_cursor_position(winit::dpi::PhysicalPosition::new(state.width() / 2, state.height() / 2)).unwrap();
-                            }
-                            state.camera.update();
-                            render_thread.update_view_projection(&state.camera, state.aspect_ratio);
-                            state.chunk_manager.collect_meshing_outputs(&state.device, &state.queue);
-                            let meshes = state.chunk_manager.get_ready_meshes();
+                            app.camera.update();
+                            render_thread.update_view_projection(&app.camera, app.aspect_ratio);
+                            app.chunk_manager.collect_meshing_outputs(&app.device, &app.queue);
+                            let meshes = app.chunk_manager.get_ready_meshes();
                             render_thread.render(RenderArgs {
-                                surface: state.surface.clone(),
-                                game_window: state.game_window.clone(),
+                                surface: app.surface.clone(),
+                                game_window: app.game_window.clone(),
                                 meshes,
-                                surface_config: state.surface_config.clone(),
-                                gui: Gui::new(&state.camera, &state.chunk_manager.chunk_map),
+                                surface_config: app.surface_config.clone(),
+                                gui: Gui::new(&app.camera, &app.chunk_manager.chunk_map, last_render_instant.elapsed()),
+                                raw_input: app.egui_winit_state.take_egui_input(&app.game_window.window()),
                             }).unwrap();
                             last_render_instant = std::time::Instant::now();
                         }
                         WindowEvent::Resized(new_size) => {
-                            state.resize_window(new_size);
+                            app.resize_window(new_size);
                         },
                         WindowEvent::KeyboardInput { event, .. } => {
                             if let winit::keyboard::PhysicalKey::Code(key_code) = event.physical_key {
-                                state.camera.handle_keyboard_input(key_code, event.state);
+                                app.camera.handle_keyboard_input(key_code, event.state);
+                                if key_code == winit::keyboard::KeyCode::AltLeft {
+                                    app.alt_pressed = event.state.is_pressed();
+                                    app.game_window.window().set_cursor_visible(event.state.is_pressed());
+                                }
                             }
                         },
                         WindowEvent::MouseInput { button, state: elem_state, .. } => {
-                            state.camera.handle_mouse_input(button, elem_state);
-                            state.camera.modify_block(&mut state.chunk_manager, BLOCK_MAP.get("lamp").unwrap().clone().into());
+                            if app.alt_pressed {
+                                return;
+                            }
+                            app.camera.handle_mouse_input(button, elem_state);
+                            app.camera.modify_block(&mut app.chunk_manager, BLOCK_MAP.get("torch").unwrap().clone().into());
                         },
                         _ => ()
                     }
                 },
                 Event::DeviceEvent { event, .. } => {
                     if let DeviceEvent::MouseMotion { delta: (delta_x, delta_y) } = event {
-                        state.camera.handle_mouse_movement(delta_x as f32, delta_y as f32);
+                        if !app.alt_pressed {
+                            app.camera.handle_mouse_movement(delta_x as f32, delta_y as f32);
+                            if app.game_window.window().has_focus() {
+                                app.game_window.window().set_cursor_position(winit::dpi::PhysicalPosition::new(app.width() / 2, app.height() / 3)).unwrap();
+                            }
+                        }
                     }
                 },
                 _ => ()

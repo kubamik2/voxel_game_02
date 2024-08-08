@@ -1,12 +1,13 @@
 use std::{collections::VecDeque, sync::{mpsc::{channel, Receiver, Sender}, Arc, Condvar, Mutex}};
+use egui::{FullOutput, RawInput};
 use wgpu::util::DeviceExt;
 use cgmath::{Matrix4, Vector2};
 
-use crate::{block::quad_buffer::QuadBuffer, camera::{Camera, Player, ViewProjection}, game_window::GameWindow, gui::{egui_renderer::EguiRenderer, Gui}, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_mesh_map::ChunkMeshMap, chunk_part::chunk_part_mesher::MeshingOutput, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, QUADS};
+use crate::{block::quad_buffer::QuadBuffer, camera::{Camera, Player, ViewProjection}, game_window::GameWindow, gui::{egui_renderer::{EguiRenderer}, Gui}, texture::{Texture, TextureAtlas}, world::{chunk::{chunk_mesh_map::ChunkMeshMap, chunk_part::chunk_part_mesher::MeshingOutput, dynamic_chunk_mesh::DynamicChunkMesh}, PARTS_PER_CHUNK}, QUADS};
 
 pub struct RenderThread {
     event_sender: Arc<Sender<RenderEvent>>,
-    pub work_done_receiver: Receiver<()>,
+    pub work_done_receiver: Receiver<FullOutput>
 }
 
 pub enum RenderEvent {
@@ -20,6 +21,7 @@ pub struct RenderArgs {
     pub meshes: Box<[DynamicChunkMesh]>,
     pub surface_config: wgpu::SurfaceConfiguration,
     pub gui: Gui,
+    pub raw_input: RawInput,
 }
 
 impl RenderThread {
@@ -38,7 +40,7 @@ impl RenderThread {
         self.event_sender.send(RenderEvent::UpdateViewProjection(camera.build_view_projection_matrix(aspect)))
     }
 
-    fn run(event_receiver: Receiver<RenderEvent>, device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>, window: Arc<winit::window::Window>) {
+    fn run(event_receiver: Receiver<RenderEvent>, device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<FullOutput>, window: Arc<winit::window::Window>) {
         let mut render_thread = RenderThreadInner::new(device, queue, surface_config, work_done_sender, window);
         for event in event_receiver.iter() {
             match event {
@@ -58,15 +60,15 @@ struct RenderThreadInner {
     quad_buffer: QuadBuffer,
     view_projection: ViewProjection,
     render_pipeline: wgpu::RenderPipeline,
-    work_done_sender: Sender<()>,
-    egui_renderer: EguiRenderer,
+    work_done_sender: Sender<FullOutput>,
     window: Arc<winit::window::Window>,
+    egui_renderer: EguiRenderer,
     light_map_texture: Texture,
     light_map_bind_group: wgpu::BindGroup,
 }
 
 impl RenderThreadInner {
-    fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<()>, window: Arc<winit::window::Window>) -> Self {
+    fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, surface_config: wgpu::SurfaceConfiguration, work_done_sender: Sender<FullOutput>, window: Arc<winit::window::Window>) -> Self {
         let depth_texture = Texture::create_depth_texture(&device, &surface_config, "depth texture");
         let texture_atlas = TextureAtlas::new("./assets/atlases/block_01.png", &device, &queue);
         let light_map_texture = Texture::from_bytes(&device, &queue, include_bytes!("../assets/atlases/light_map.png"), "light_map").unwrap();
@@ -185,9 +187,9 @@ impl RenderThreadInner {
             },
         });
 
-        let egui_renderer = EguiRenderer::new(&window, &surface_config, &device);
+        let egui_renderer = EguiRenderer::new(&surface_config, &device);
 
-        Self { device, queue, depth_texture, texture_atlas, index_buffer, quad_buffer, view_projection, render_pipeline, work_done_sender, egui_renderer, window, light_map_texture, light_map_bind_group }
+        Self { device, queue, depth_texture, texture_atlas, index_buffer, quad_buffer, view_projection, render_pipeline, work_done_sender, window, light_map_texture, light_map_bind_group, egui_renderer }
     }
 
     fn render(&mut self, args: RenderArgs) {
@@ -236,14 +238,14 @@ impl RenderThreadInner {
             size_in_pixels: [args.surface_config.width, args.surface_config.height],
             pixels_per_point: self.window.scale_factor() as f32
         };
-
-        self.egui_renderer.draw(&self.device, &self.queue, &mut encoder, &self.window, &view, screen_descriptor, |ctx| {
+        let full_output = self.egui_renderer.draw(&self.device, &self.queue, &mut encoder, &view, screen_descriptor, args.raw_input, |ctx| {
             egui::CentralPanel::default()
             .show(ctx, |ui| {
                 ui.centered_and_justified(|center| 
                     center.label(egui::RichText::new("+")
                         .color(egui::Color32::DARK_GRAY)
                         .size(32.0)
+                        .monospace()
                     )
                 )
             });
@@ -254,6 +256,6 @@ impl RenderThreadInner {
 
         args.game_window.window().pre_present_notify();
         output.present();
-        self.work_done_sender.send(()).expect("render_thread work_done_sender.send() failed");
+        self.work_done_sender.send(full_output).expect("render_thread work_done_sender.send() failed");
     }
 }

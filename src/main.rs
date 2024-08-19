@@ -1,10 +1,9 @@
-#![feature(variant_count, float_next_up_down)]
+#![feature(variant_count, float_next_up_down, downcast_unchecked)]
 use block::{asset_loader::{BlockList, BlockMap}, model::{BlockModelVariants, QuadRaw}, Block};
 use cgmath::Vector3;
 use hashbrown::HashMap;
 use application::Application;
 use world::structure::Structure;
-use std::sync::{Arc, Mutex};
 
 mod application;
 mod game_window;
@@ -21,8 +20,8 @@ mod thread_work_dispatcher;
 mod gui;
 mod layer;
 mod event;
-
-// pub static DEBUG_GUI: 
+mod typemap;
+mod keybinds;
 
 lazy_static::lazy_static! {
     pub static ref BASE_MODELS: block::asset_loader::BaseQuadBlockModels = block::asset_loader::load_models("./assets/models").unwrap();
@@ -33,14 +32,11 @@ lazy_static::lazy_static! {
     pub static ref BLOCK_MODEL_VARIANTS: BlockModelVariants = _TEMP.2.clone();
     pub static ref QUADS: Vec<QuadRaw> = _TEMP.3.clone();
     pub static ref OBSTRUCTS_LIGHT_CACHE: bitmaps::Bitmap<1024> = {
-        // let mut v = vec![];
         let mut bitmap = bitmaps::Bitmap::new();
 
         for (i, info) in BLOCK_LIST.iter().enumerate() {
             bitmap.set(i, info.properties().obstructs_light);
-            // v.push(info.properties().obstructs_light);
         }
-        // v.into_boxed_slice()
         bitmap
     };
 

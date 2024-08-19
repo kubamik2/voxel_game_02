@@ -1,25 +1,26 @@
 use cgmath::Vector3;
 use egui::{Color32, RichText, Ui};
 
-use crate::{block::light::LightLevel, camera::Player, global_vector::GlobalVecF, world::chunk::chunk_map::ChunkMap};
+use crate::{block::light::LightLevel, global_vector::GlobalVecF, world::World};
 
 pub mod egui_renderer;
-pub struct Gui {
+pub struct DebugGui {
     pub position: GlobalVecF,
     pub direction: Vector3<f32>,
     pub light_level: LightLevel,
     pub last_frame_time: std::time::Duration,
 }
 
-impl Gui {
-    pub fn new(player: &Player, chunk_map: &ChunkMap, last_frame_time: std::time::Duration) -> Self {
+impl DebugGui {
+    pub fn new(world: &World, last_frame_time: std::time::Duration) -> Self {
         Self {
-            position: player.position,
-            direction: player.direction,
-            light_level: chunk_map.get_light_level_global(player.position.into()).map(|f| *f).unwrap_or(LightLevel::new(0, 0).unwrap()),
+            position: world.player.position,
+            direction: world.player.direction,
+            light_level: world.chunk_manager.chunk_map.get_light_level_global(world.player.position.into()).map(|f| *f).unwrap_or(LightLevel::new(0, 0).unwrap()),
             last_frame_time,
         }
     }
+
     pub fn debug(&self, ctx: &egui::Context) {
         #[inline]
         fn add_label(ui: &mut Ui, text: String) {

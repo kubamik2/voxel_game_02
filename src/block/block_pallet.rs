@@ -1,6 +1,6 @@
 use crate::{world::chunk::chunk_part::CHUNK_SIZE, BLOCK_MAP};
 
-use super::{block_state::BlockState, Block};
+use super::Block;
 
 pub type BlockPalletItemId = u16;
 

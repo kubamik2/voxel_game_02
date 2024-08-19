@@ -1,5 +1,6 @@
+use cgmath::Vector2;
 use winit::{
-    event_loop::EventLoop, window::{Window, WindowBuilder}
+    event::MouseButton, event_loop::EventLoop, keyboard::KeyCode, window::{Window, WindowBuilder}
 };
 use std::sync::Arc;
 use crate::settings::Settings;
@@ -50,4 +51,27 @@ impl GameWindow {
         self.window.set_min_inner_size(Some(new_size));
         self.window.set_max_inner_size(Some(new_size));
     }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum GameWindowEvent {
+    RedrawRequested,
+}
+
+#[derive(Clone)]
+pub struct KeyboardInputEvent {
+    pub key_code: KeyCode,
+    pub pressed: bool,
+    pub repeat: bool,
+}
+
+#[derive(Clone)]
+pub struct MouseInputEvent {
+    pub button: MouseButton,
+    pub pressed: bool,
+}
+
+#[derive(Clone)]
+pub struct MouseMoveEvent {
+    pub delta: Vector2<f64>,
 }

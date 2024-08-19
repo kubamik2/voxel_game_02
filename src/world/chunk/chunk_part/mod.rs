@@ -5,7 +5,7 @@ use std::ops::Index;
 
 use cgmath::Vector3;
 
-use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::{LightLevel, LightNode}, Block}, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP};
+use crate::block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::{LightLevel, LightNode}, Block};
 
 pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_SIZE_F32: f32 = CHUNK_SIZE as f32;

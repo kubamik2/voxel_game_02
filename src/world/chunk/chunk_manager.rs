@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
-use cgmath::{Vector2, Vector3};
+use cgmath::Vector2;
 use hashbrown::HashSet;
 
-use crate::{global_vector::{GlobalVecF, GlobalVecU}, world::PARTS_PER_CHUNK};
+use crate::{global_vector::GlobalVecU, world::PARTS_PER_CHUNK};
 
 use super::{chunk_generator::{ChunkGenerator, ChunkGeneratorOutput, GenerationStage}, chunk_map::ChunkMap, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, expanded_chunk_part::ExpandedChunkPart}, dynamic_chunk_mesh::DynamicChunkMesh, Chunk};
 
@@ -115,10 +113,7 @@ impl ChunkManager {
 
         for chunk in self.chunk_map.values() {
             if issued_meshings >= idle_mesh_threads { break; }
-            let chunk_position = {
-                // if chunk.generation_stage != GenerationStage::LAST_GENERATION_STAGE { continue; }
-                chunk.position
-            };
+            let chunk_position = chunk.position;
 
             if !self.chunk_map.is_chunk_surrounded_by_chunks_at_least_at_stage(chunk_position, GenerationStage::LAST_GENERATION_STAGE) { continue; }
 
@@ -130,6 +125,7 @@ impl ChunkManager {
                         if (is_part_meshed && !needs_meshing) || is_part_meshing_scheduled { continue; }
 
                         mesh.parts_meshing_scheduled[chunk_part_index] = true;
+                        mesh.parts_need_meshing[chunk_part_index] = false;
                         let expanded_chunk_part = ExpandedChunkPart::new(&self.chunk_map, chunk_position, chunk_part_index).unwrap();
                         self.mesher.mesh_chunk_part(expanded_chunk_part, chunk_position, chunk_part_index).unwrap();
                         issued_meshings += 1;
@@ -139,6 +135,7 @@ impl ChunkManager {
                     let mut mesh = DynamicChunkMesh::new(device, chunk_position);
                     for chunk_part_index in 0..idle_mesh_threads.saturating_sub(issued_meshings).min(PARTS_PER_CHUNK) {
                         mesh.parts_meshing_scheduled[chunk_part_index] = true;
+                        mesh.parts_need_meshing[chunk_part_index] = false;
                         let expanded_chunk_part = ExpandedChunkPart::new(&self.chunk_map, chunk_position, chunk_part_index).unwrap();
                         self.mesher.mesh_chunk_part(expanded_chunk_part, chunk_position, chunk_part_index).unwrap();
                         issued_meshings += 1;

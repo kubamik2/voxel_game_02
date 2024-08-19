@@ -1,14 +1,22 @@
-use std::{collections::VecDeque, mem::MaybeUninit, sync::Arc};
+use std::{collections::VecDeque, fmt::Debug, mem::MaybeUninit, sync::Arc};
 
-use cgmath::{num_traits::Euclid, Vector2, Vector3};
+use cgmath::{Vector2, Vector3};
 use hashbrown::{HashMap, HashSet};
 
-use crate::{block::{light::{LightLevel, LightNode, LIGHT_LEVEL_MAX_VALUE}, Block}, world::{chunk::chunk_part::{CHUNK_SIZE_I16, CHUNK_SIZE_I32}, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_LIST, BLOCK_MAP, OBSTRUCTS_LIGHT_CACHE};
+use crate::{block::{light::{LightLevel, LightNode, LIGHT_LEVEL_MAX_VALUE}, Block}, world::{chunk::chunk_part::CHUNK_SIZE_I32, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, OBSTRUCTS_LIGHT_CACHE};
 
 use super::{chunk_map::ChunkMap, chunk_part::{ChunkPart, CHUNK_SIZE}, Chunk};
 
 pub struct Area {
     pub chunks: [Arc<Chunk>; 9]
+}
+
+impl Debug for Area {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("area")
+        .field("center_chunk", &self.center_chunk().position)
+        .finish()
+    }
 }
 
 impl Area {

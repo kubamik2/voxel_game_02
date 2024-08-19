@@ -1,5 +1,3 @@
-use std::ops::{Index, IndexMut};
-
 use cgmath::{Vector2, Vector3};
 
 use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::LightLevel, Block}, world::{chunk::{chunk_map::ChunkMap, chunk_part::ChunkPart}, PARTS_PER_CHUNK}};

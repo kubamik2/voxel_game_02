@@ -10,6 +10,10 @@ impl Interval {
         Self { interval, last_execution_time: std::time::Instant::now() }
     }
 
+    pub fn new_hz(hz: f32) -> Self {
+        Self { interval: std::time::Duration::from_secs_f32(1.0 / hz), last_execution_time: std::time::Instant::now() }
+    }
+
     pub fn tick<F: FnOnce()>(&mut self, f: F) {
         if self.last_execution_time.elapsed() >= self.interval {
             (f)();

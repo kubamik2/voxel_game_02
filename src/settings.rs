@@ -5,6 +5,7 @@ pub struct Settings {
     pub resolution: (u32, u32),
     pub fullscreen: bool,
     pub borderless: bool,
+    pub render_distance: u32,
 }
 
 impl Default for Settings {
@@ -12,7 +13,8 @@ impl Default for Settings {
         Self {
             resolution: (1000, 1000),
             fullscreen: false,
-            borderless: false
+            borderless: false,
+            render_distance: 16,
         }
     }
 }

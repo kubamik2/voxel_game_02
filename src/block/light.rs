@@ -1,5 +1,3 @@
-use cgmath::Vector3;
-
 pub const LIGHT_LEVEL_BITS: u32 = 4;
 pub const LIGHT_LEVEL_MAX_VALUE: u8 = (1 << LIGHT_LEVEL_BITS) - 1;
 

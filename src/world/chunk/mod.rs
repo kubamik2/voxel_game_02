@@ -1,12 +1,11 @@
-use std::sync::{Arc, OnceLock};
+use std::{fmt::Debug, sync::OnceLock};
 
 use cgmath::{Vector2, Vector3};
 use chunk_generator::GenerationStage;
-use chunk_part::{chunk_part_mesher::MeshingOutput, ChunkPart, CHUNK_SIZE};
-use dynamic_chunk_mesh::DynamicChunkMesh;
+use chunk_part::{ChunkPart, CHUNK_SIZE};
 use wgpu::util::DeviceExt;
 
-use crate::{block::{light::LightLevel, model::FacePacked, Block}, global_vector::GlobalVecF};
+use crate::block::Block;
 
 use super::PARTS_PER_CHUNK;
 
@@ -17,8 +16,6 @@ pub mod chunk_mesh_map;
 pub mod chunk_manager;
 pub mod chunk_generator;
 pub mod area;
-pub mod chunk_layer;
-pub mod chunk_rendering_layer;
 
 #[derive(Clone)]
 pub struct Chunk {
@@ -26,6 +23,14 @@ pub struct Chunk {
     pub parts: [ChunkPart; PARTS_PER_CHUNK],
     pub generation_stage: GenerationStage,
     pub highest_blocks: [(u8, u8); CHUNK_SIZE * CHUNK_SIZE],
+}
+
+impl Debug for Chunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Chunk")
+        .field("position", &self.position)
+        .finish()
+    }
 }
 
 impl Chunk {

@@ -1,11 +1,11 @@
-use std::{sync::{Arc, Mutex}};
+use std::sync::Arc;
 
 use cgmath::{Vector2, Vector3};
 use hashbrown::{hash_map::{Keys, Values}, HashMap};
 
-use crate::{block::{light::LightLevel, Block}, global_vector::{GlobalVecF, GlobalVecU}, world::PARTS_PER_CHUNK};
+use crate::{block::{light::LightLevel, Block}, global_vector::GlobalVecU, world::PARTS_PER_CHUNK};
 
-use super::{chunk_generator::GenerationStage, chunk_part::{chunk_part_mesher::MeshingOutput, ChunkPart}, Chunk};
+use super::{chunk_generator::GenerationStage, chunk_part::ChunkPart, Chunk};
 
 pub struct ChunkMap {
     chunks: HashMap<Vector2<i32>, Arc<Chunk>>

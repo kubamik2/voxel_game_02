@@ -1,10 +1,10 @@
-use std::{collections::HashMap, ops::{Deref, DerefMut}};
+use std::collections::HashMap;
 
-use cgmath::{Point2, Point3, Vector2, Vector3, Vector4};
+use cgmath::{Vector2, Vector3};
 
 use crate::collision::bounding_box::LocalBoundingBox;
 
-use super::{asset_loader::QuadIndicesMap, block_state::{BlockState, Value}, light::{LightLevel, LIGHT_LEVEL_BITS}, Block, FaceDirection, Properties, FACE_DIRECTIONS_NUM};
+use super::{block_state::{BlockState, Value}, light::{LightLevel, LIGHT_LEVEL_BITS}, Block, FaceDirection, Properties, FACE_DIRECTIONS_NUM};
 
 pub const INDICES_PER_FACE: u32 = 6;
 pub type IndexFormat = u32;
@@ -184,7 +184,7 @@ impl BlockModelVariants {
         let mut models = vec![];
         let Some(variants) = self.models.get(&block.name) else { return None; };
 
-        'outer: for variant in variants.iter() {
+        for variant in variants.iter() {
             'inner: for (name, value) in variant.required_state.iter() {
                 let Some(block_state_value) = block.block_state.get(&name) else { continue 'inner; };
                 if *block_state_value == *value {

@@ -3,7 +3,7 @@ use std::sync::{mpsc::{Receiver, Sender}, Arc, Mutex};
 use cgmath::{Vector2, Vector3};
 use hashbrown::HashSet;
 
-use crate::{block::{light::{LightLevel, LightNode}, Block}, thread_work_dispatcher::ThreadWorkDispatcher, world::{structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP, STRUCTURES};
+use crate::{block::Block, thread_work_dispatcher::ThreadWorkDispatcher, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP, STRUCTURES};
 
 use super::{area::Area, chunk_map::ChunkMap, chunk_part::CHUNK_SIZE, Chunk};
 
@@ -11,6 +11,7 @@ lazy_static::lazy_static! {
     static ref DBG: Arc<Mutex<(usize, std::time::Duration, std::time::Duration, std::time::Duration)>> = Arc::new(Mutex::new((0, std::time::Duration::ZERO, std::time::Duration::ZERO, std::time::Duration::MAX)));
 }
 
+#[derive(Debug)]
 pub enum ChunkGeneratorInput {
     Chunk(Arc<Chunk>),
     Area(Area)
@@ -73,7 +74,7 @@ impl ChunkGenerator {
             GenerationStage::Light => create_input_area(chunk_map, chunk_position, scheduled_generations),
         }) else { return; };
 
-        self.thread_work_dispatcher.dispatch_work(generation_input);
+        self.thread_work_dispatcher.dispatch_work(generation_input).expect("chunk_generator.generate_chunk_to_next_stage thread_work_dispatcher.dispatch_work failed");
     }
 
     pub fn idle_threads(&self) -> usize {
@@ -181,17 +182,17 @@ impl ChunkGenerator {
         for chunk_part_index in 0..PARTS_PER_CHUNK {
             area.propagate_block_light_in_chunk_part(chunk_part_index);
         }
-        let elapsed = now.elapsed();
-        let mut dbg = DBG.lock().unwrap();
-        dbg.0 += 1;
-        dbg.1 += elapsed;
-        if dbg.2 < elapsed {
-            dbg.2 = elapsed;
-        }
-        if dbg.3 > elapsed {
-            dbg.3 = elapsed;
-        }
-        println!("num: {: <5} sum: {: <8.2?} avg: {: <8.2?} max: {: <8.2?} min: {: <8.2?}", dbg.0, dbg.1, dbg.1 / dbg.0 as u32, dbg.2, dbg.3);
+        // let elapsed = now.elapsed();
+        // let mut dbg = DBG.lock().unwrap();
+        // dbg.0 += 1;
+        // dbg.1 += elapsed;
+        // if dbg.2 < elapsed {
+        //     dbg.2 = elapsed;
+        // }
+        // if dbg.3 > elapsed {
+        //     dbg.3 = elapsed;
+        // }
+        // println!("num: {: <5} sum: {: <8.2?} avg: {: <8.2?} max: {: <8.2?} min: {: <8.2?}", dbg.0, dbg.1, dbg.1 / dbg.0 as u32, dbg.2, dbg.3);
         area.get_chunk_mut(Vector2::new(0, 0)).unwrap().generation_stage = GenerationStage::Light;
     }
 

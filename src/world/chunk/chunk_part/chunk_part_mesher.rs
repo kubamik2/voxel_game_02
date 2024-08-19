@@ -1,8 +1,8 @@
-use std::{collections::HashMap, sync::mpsc::{channel, Receiver, Sender}, thread::JoinHandle};
+use std::sync::mpsc::{Receiver, Sender};
 
 use cgmath::Vector2;
 
-use crate::{block::{light::LightLevel, model::{Face, FacePacked}, FaceDirection, FACE_DIRECTIONS_NUM}, BLOCK_MAP, BLOCK_MODEL_VARIANTS};
+use crate::{block::{model::{Face, FacePacked}, FaceDirection, FACE_DIRECTIONS_NUM}, BLOCK_MAP, BLOCK_MODEL_VARIANTS};
 
 use super::{expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE};
 

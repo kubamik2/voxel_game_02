@@ -4,7 +4,7 @@ use cgmath::Vector2;
 
 use crate::{block::model::{Face, FacePacked}, world::PARTS_PER_CHUNK};
 
-use super::{chunk_map::ChunkMap, chunk_part::{chunk_part_mesher::MeshingOutput, CHUNK_SIZE}, ChunkTranslation};
+use super::{chunk_part::{chunk_part_mesher::MeshingOutput, CHUNK_SIZE}, ChunkTranslation};
 
 static FACE_BUFFER_BIND_GROUP_LAYOUT: std::sync::OnceLock<wgpu::BindGroupLayout> = std::sync::OnceLock::new();
 
@@ -143,8 +143,6 @@ impl DynamicChunkMesh {
             self.resize(device);
             for i in 0..PARTS_PER_CHUNK {
                 if i == chunk_part_index || self.parts_meshing_scheduled[i] { continue; }
-
-                // self.parts_meshed[i] = false;
                 self.parts_need_meshing[i] = true;
             }
         }
@@ -158,6 +156,9 @@ impl DynamicChunkMesh {
 
         self.parts_meshed[chunk_part_index] = true;
         self.parts_meshing_scheduled[chunk_part_index] = false;
-        self.parts_need_meshing[chunk_part_index] = false;
     }
+}
+
+pub struct DynamicChunkMeshBundle {
+    meshes: Arc<DynamicChunkMesh>,
 }

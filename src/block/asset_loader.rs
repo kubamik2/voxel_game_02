@@ -4,7 +4,7 @@ use cgmath::{Deg, Rotation, Vector3};
 
 use crate::block::FACE_DIRECTIONS_NUM;
 
-use super::{model::{BlockDeserialize, BlockModelVariant, BlockModelVariants, CuboidBlockModel, QuadBlockModel, QuadIndexBlockModel, QuadRaw}, quad_buffer::QuadBuffer, Block, BlockId, BlockInformation};
+use super::{model::{BlockDeserialize, BlockModelVariant, BlockModelVariants, CuboidBlockModel, QuadBlockModel, QuadIndexBlockModel, QuadRaw}, BlockId, BlockInformation};
 const TEXTURE_ATLAS_HEIGHT_IN_BLOCKS: u32 = 16;
 const TEXTURE_ATLAS_WIDTH_IN_BLOCKS: u32 = 16;
 const TEXTURE_ATLAS_UV_HEIGHT_PER_BLOCK: f32 = 1.0 / TEXTURE_ATLAS_HEIGHT_IN_BLOCKS as f32;

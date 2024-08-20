@@ -1,11 +1,12 @@
-use std::sync::Arc;
+use std::{io::Read, sync::Arc};
 
+use egui::Color32;
 use wgpu::{Device, Features, Queue};
 use winit::{event::Event, event_loop::EventLoop};
 
 use crate::{game_window::{GameWindow, GameWindowEvent, KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, layer::{game_logic_layer::{GameLogicLayer, ChunkUpdateRenderMesh}, chunk_rendering_layer::ChunkRenderingLayer, game_window_layer::GameWindowLayer, LayerStack}, render_thread::RenderThread, settings::Settings};
 
-pub struct Application {
+pub struct Game {
     pub game_window: GameWindow,
 
     pub settings: Settings,
@@ -24,9 +25,11 @@ pub struct Application {
     pub is_render_frame: bool,
 
     pub egui_winit_state: egui_winit::State,
+    pub egui_full_output: egui::FullOutput,
+    pub last_render_instant: std::time::Instant,
 }
 
-impl Application {
+impl Game {
     pub async fn new(settings_path: &std::path::Path) -> anyhow::Result<(Self, EventLoop<()>)> {
         let settings = Settings::from_file(settings_path)?;
         let settings_last_modified = std::fs::metadata(settings_path)?.modified()?;
@@ -85,7 +88,29 @@ impl Application {
         let egui_context = egui::Context::default();
         let viewport_id = egui_context.viewport_id();
         let egui_winit_state = egui_winit::State::new(egui_context, viewport_id, game_window.window(), None, None);
-        
+
+        let visuals = egui::Visuals {
+            window_fill: Color32::from_rgb(0, 0, 0),
+            faint_bg_color: Color32::TRANSPARENT,
+            extreme_bg_color: Color32::TRANSPARENT,
+            panel_fill: Color32::TRANSPARENT,
+            window_shadow: egui::epaint::Shadow::NONE,
+            window_rounding: egui::Rounding::same(2.0),
+            window_stroke: egui::Stroke::NONE,
+            ..Default::default()
+        };
+
+        if let Ok(mut file) = std::fs::File::open("./assets/fonts/minecraft.ttf") {
+            let mut bytes = vec![];
+            if let Ok(_) = file.read_to_end(&mut bytes) {
+                let mut fonts = egui::FontDefinitions::default();
+                fonts.font_data.insert("custom_font".to_string(), egui::FontData::from_owned(bytes));
+                fonts.families.get_mut(&egui::FontFamily::Proportional).unwrap().insert(0, "custom_font".to_string());
+                egui_winit_state.egui_ctx().set_fonts(fonts);
+            }
+        }
+
+        egui_winit_state.egui_ctx().set_visuals(visuals);
         Ok((
             Self {
                 game_window,
@@ -101,6 +126,8 @@ impl Application {
                 quit: false,
                 is_render_frame: false,
                 egui_winit_state,
+                egui_full_output: egui::FullOutput::default(),
+                last_render_instant: std::time::Instant::now(),
             }, 
             event_loop,
         ))
@@ -125,7 +152,7 @@ impl Application {
 
     pub fn run<T: Into<std::path::PathBuf>>(settings_path: T) -> anyhow::Result<()> {
         let settings_path = settings_path.into();
-        let (mut app, event_loop) = pollster::block_on(Self::new(&settings_path))?;
+        let (mut game, event_loop) = pollster::block_on(Self::new(&settings_path))?;
         
         let mut layers = LayerStack::new();
 
@@ -137,14 +164,14 @@ impl Application {
         layers.register_event_type::<Event<()>>();
 
         layers.push_layer(Box::new(GameWindowLayer::new(&layers.events)));
-        layers.push_layer(Box::new(GameLogicLayer::new(&layers.events, &app.settings)));
+        layers.push_layer(Box::new(GameLogicLayer::new(&game.device, &game.queue, &game.surface_config, &layers.events, &game.settings).unwrap()));
         layers.push_layer(Box::new(ChunkRenderingLayer::new(&layers.events)));
 
         event_loop.run(move |event, elwt| {
             elwt.set_control_flow(winit::event_loop::ControlFlow::Poll);
             layers.events.send(event);
-            layers.update(&mut app);
-            if app.quit {
+            layers.update(&mut game);
+            if game.quit {
                 elwt.exit();
             }
         })?;

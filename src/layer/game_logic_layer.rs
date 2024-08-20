@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use cgmath::{Vector2, Vector3};
 
-use crate::{application::Application, event::{EventReader, Events}, game_window::{KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, interval::Interval, layer::Layer, settings::Settings, world::{chunk::{area::Area, chunk_part::CHUNK_SIZE_I32, dynamic_chunk_mesh::DynamicChunkMesh}, World}, BLOCK_MAP};
+use crate::{game::Game, camera::Camera, event::{EventReader, Events}, game_window::{KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, gui::DebugGui, interval::Interval, layer::Layer, settings::Settings, world::{chunk::{area::Area, chunk_part::CHUNK_SIZE_I32, dynamic_chunk_mesh::DynamicChunkMesh}, World}, BLOCK_MAP};
 
 pub struct GameLogicLayer {
     world: World,
@@ -14,9 +14,9 @@ pub struct GameLogicLayer {
 }
 
 impl Layer for GameLogicLayer {
-    fn on_update(&mut self, events: &mut Events, application: &mut Application) {
+    fn on_update(&mut self, events: &mut Events, game: &mut Game) {
         self.interval_300hz.tick(|| {
-            self.world.chunk_manager.update(&application.device);
+            self.world.chunk_manager.update(&game.device);
         });
 
         self.interval_60hz.tick(|| {
@@ -68,26 +68,25 @@ impl Layer for GameLogicLayer {
         }
     }
 
-    fn on_render(&mut self, events: &mut Events, application: &mut Application) {
-        self.world.chunk_manager.collect_meshing_outputs(&application.device, &application.queue);
-        events.send(ChunkUpdateRenderMesh {
-            meshes: self.world.chunk_manager.get_ready_meshes().into(),
-        });
+    fn on_render(&mut self, events: &mut Events, game: &mut Game) {
         self.world.player.update();
-        application.render_thread.update_view_projection(&self.world.player, application.aspect_ratio);
+        let debug_gui = DebugGui::new(&self.world, game.last_render_instant.elapsed());
+        debug_gui.show(game.egui_winit_state.egui_ctx());
+        self.world.chunk_renderer.view_projection.update_from_matrix(self.world.player.build_view_projection_matrix(game.aspect_ratio));
+        self.world.chunk_renderer.render(&game.device, &game.queue, &mut self.world.chunk_manager, &mut game.render_thread);
     }
 }
 
 impl GameLogicLayer {
-    pub fn new(events: &Events, settings: &Settings) -> Self {
-        Self {
-            world: World::new(settings),
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, surface_config: &wgpu::SurfaceConfiguration, events: &Events, settings: &Settings) -> anyhow::Result<Self> {
+        Ok(Self {
+            world: World::new(device, queue, surface_config, settings)?,
             interval_300hz: Interval::new_hz(300.0),
             interval_60hz: Interval::new_hz(60.0),
             keyboard_input_reader: EventReader::new(events),
             mouse_input_reader: EventReader::new(events),
             mouse_move_reader: EventReader::new(events),
-        }
+        })
     }
 }
 

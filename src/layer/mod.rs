@@ -2,13 +2,13 @@ pub mod game_logic_layer;
 pub mod chunk_rendering_layer;
 pub mod game_window_layer;
 
-use crate::{application::Application, event::Events};
+use crate::{game::Game, event::Events};
 
 pub trait Layer {
     fn on_attach(&mut self, events: &mut Events) {}
     fn on_detach(&mut self, events: &mut Events) {}
-    fn on_update(&mut self, events: &mut Events, application: &mut Application) {}
-    fn on_render(&mut self, events: &mut Events, application: &mut Application) {}
+    fn on_update(&mut self, events: &mut Events, game: &mut Game) {}
+    fn on_render(&mut self, events: &mut Events, game: &mut Game) {}
 }
 
 pub struct LayerStack {
@@ -42,23 +42,23 @@ impl LayerStack {
         layer.on_detach(&mut self.events)
     }
 
-    pub fn update(&mut self, application: &mut Application) {
+    pub fn update(&mut self, game: &mut Game) {
         for layer in self.layers.iter_mut() {
-            layer.on_update(&mut self.events, application);
-            if application.is_render_frame {
-                layer.on_render(&mut self.events, application);
+            layer.on_update(&mut self.events, game);
+            if game.is_render_frame {
+                layer.on_render(&mut self.events, game);
             }
         }
 
         for overlay in self.overlays.iter_mut() {
-            overlay.on_update(&mut self.events, application);
-            if application.is_render_frame {
-                overlay.on_render(&mut self.events, application);
+            overlay.on_update(&mut self.events, game);
+            if game.is_render_frame {
+                overlay.on_render(&mut self.events, game);
             }
         }
 
         self.events.update();
-        application.is_render_frame = false;
+        game.is_render_frame = false;
     }
 
     pub fn register_event_type<E: 'static + Clone>(&mut self) {

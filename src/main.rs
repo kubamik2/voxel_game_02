@@ -2,10 +2,10 @@
 use block::{asset_loader::{BlockList, BlockMap}, model::{BlockModelVariants, QuadRaw}, Block};
 use cgmath::Vector3;
 use hashbrown::HashMap;
-use application::Application;
+use game::Game;
 use world::structure::Structure;
 
-mod application;
+mod game;
 mod game_window;
 mod settings;
 mod camera;
@@ -22,6 +22,8 @@ mod layer;
 mod event;
 mod typemap;
 mod keybinds;
+mod utils;
+mod shader;
 
 lazy_static::lazy_static! {
     pub static ref BASE_MODELS: block::asset_loader::BaseQuadBlockModels = block::asset_loader::load_models("./assets/models").unwrap();
@@ -77,5 +79,5 @@ lazy_static::lazy_static! {
 }
 
 fn main() -> anyhow::Result<()> {
-    Application::run("./settings.json")
+    Game::run("./settings.json")
 }

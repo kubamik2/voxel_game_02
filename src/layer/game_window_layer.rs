@@ -9,22 +9,22 @@ pub struct GameWindowLayer {
 }
 
 impl Layer for GameWindowLayer {
-    fn on_update(&mut self, events: &mut crate::event::Events, application: &mut crate::application::Application) {
-        if application.render_thread.is_work_done() {
-            application.game_window.window().request_redraw();
+    fn on_update(&mut self, events: &mut crate::event::Events, game: &mut crate::game::Game) {
+        if game.render_thread.is_work_done() {
+            game.game_window.window().request_redraw();
         }
 
         for event in self.winit_event_reader.read(events).cloned().collect::<Vec<winit::event::Event<()>>>() {
             match event {
                 winit::event::Event::WindowEvent { event, .. } => {
-                    let _ = application.egui_winit_state.on_window_event(application.game_window.window(), &event);
+                    let _ = game.egui_winit_state.on_window_event(game.game_window.window(), &event);
 
                     match event {
                         WindowEvent::KeyboardInput { event, .. } => {
                             if let PhysicalKey::Code(key_code) = event.physical_key {
                                 // TODO temp
                                 if let KeyCode::Escape = key_code {
-                                    application.quit = true;
+                                    game.quit = true;
                                 }
                                 events.send(KeyboardInputEvent { key_code, pressed: event.state.is_pressed(), repeat: event.repeat });
                             }
@@ -34,13 +34,13 @@ impl Layer for GameWindowLayer {
                         },
                         WindowEvent::RedrawRequested => {
                             events.send(GameWindowEvent::RedrawRequested);
-                            application.is_render_frame = true;
+                            game.is_render_frame = true;
                         },
                         WindowEvent::CloseRequested => {
-                            application.quit = true;
+                            game.quit = true;
                         },
                         WindowEvent::Resized(new_size) => {
-                            application.resize_window(new_size);
+                            game.resize_window(new_size);
                         },
                         _ => ()
                     }
@@ -48,13 +48,13 @@ impl Layer for GameWindowLayer {
                 winit::event::Event::DeviceEvent { event, .. } => {
                     match event {
                         DeviceEvent::MouseMotion { delta } => {
-                            application.egui_winit_state.on_mouse_motion(delta);
+                            game.egui_winit_state.on_mouse_motion(delta);
                             events.send(MouseMoveEvent { delta: delta.into() });
 
                             // TODO temp
-                            let x = application.surface_config.width / 2;
-                            let y = application.surface_config.height / 2;
-                            let _ = application.game_window.window().set_cursor_position(winit::dpi::PhysicalPosition::new(x, y));
+                            let x = game.surface_config.width / 2;
+                            let y = game.surface_config.height / 2;
+                            let _ = game.game_window.window().set_cursor_position(winit::dpi::PhysicalPosition::new(x, y));
                         },
                         _ => ()
                     }
@@ -62,9 +62,14 @@ impl Layer for GameWindowLayer {
                 _ => ()
             }
         }
+
     }
 
-    fn on_render(&mut self, events: &mut Events, application: &mut crate::application::Application) {
+    fn on_render(&mut self, events: &mut Events, game: &mut crate::game::Game) {
+        game.game_window.window().set_cursor_visible(false);
+        game.egui_winit_state.handle_platform_output(game.game_window.window(), game.egui_full_output.platform_output.clone());
+        let raw_input = game.egui_winit_state.take_egui_input(game.game_window.window());
+        game.egui_winit_state.egui_ctx().begin_frame(raw_input);
     }
 }
 

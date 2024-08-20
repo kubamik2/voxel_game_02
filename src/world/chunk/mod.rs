@@ -16,6 +16,7 @@ pub mod chunk_mesh_map;
 pub mod chunk_manager;
 pub mod chunk_generator;
 pub mod area;
+pub mod chunk_renderer;
 
 #[derive(Clone)]
 pub struct Chunk {

@@ -4,10 +4,12 @@ use cgmath::{Vector2, Vector3};
 
 use crate::collision::bounding_box::LocalBoundingBox;
 
-use super::{block_state::{BlockState, Value}, light::{LightLevel, LIGHT_LEVEL_BITS}, Block, FaceDirection, Properties, FACE_DIRECTIONS_NUM};
+use super::{block_state::{BlockState, Value}, light::{LightLevel, LIGHT_LEVEL_BITS}, quad_buffer::QuadBuffer, Block, FaceDirection, Properties, FACE_DIRECTIONS_NUM};
 
 pub const INDICES_PER_FACE: u32 = 6;
 pub type IndexFormat = u32;
+
+pub static QUAD_BUFFER: std::sync::OnceLock<QuadBuffer> = std::sync::OnceLock::new();
 
 #[derive(serde::Deserialize, Debug)]
 pub struct CuboidBlockModel {

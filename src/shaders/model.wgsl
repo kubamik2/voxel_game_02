@@ -28,9 +28,9 @@ struct LightLevel {
     sky: u32
 }
 
-@group(0) @binding(0) var<uniform> camera: CameraUniform;
-@group(1) @binding(0) var<storage, read> face_buffer: array<vec4u>;
-@group(2) @binding(0) var<storage, read> quad_buffer: array<ModelQuad>;
+@group(2) @binding(0) var<uniform> camera: CameraUniform;
+@group(3) @binding(0) var<storage, read> face_buffer: array<vec4u>;
+@group(1) @binding(0) var<storage, read> quad_buffer: array<ModelQuad>;
 @group(4) @binding(0) var<uniform> translation: vec2i;
 
 const TEXTURE_ATLAS_WIDTH: u32 = 256;
@@ -67,8 +67,8 @@ fn construct_face(vertex_index: u32) -> Face {
     return(face);
 }
 
-@group(5) @binding(0) var light_map_tex: texture_2d<f32>;
-@group(5) @binding(1) var light_map_sampler: sampler;
+@group(0) @binding(2) var light_map_tex: texture_2d<f32>;
+@group(0) @binding(3) var light_map_sampler: sampler;
 
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32, @builtin(instance_index) instance_index: u32) -> VertexOutput {
@@ -98,8 +98,8 @@ fn vs_main(@builtin(vertex_index) i: u32, @builtin(instance_index) instance_inde
     return out;
 }
 
-@group(3) @binding(0) var t_diffuse: texture_2d<f32>;
-@group(3) @binding(1) var s_diffuse: sampler;
+@group(0) @binding(0) var t_diffuse: texture_2d<f32>;
+@group(0) @binding(1) var s_diffuse: sampler;
 const BLOCK_SIZE: f32 = 1.0 / 16.0;
 const DARK_TEXTURE_COORDS: vec2u = vec2u(11u % 16u, 11u / 16u);
 const DARK_TEXTURE_BASE_UV: vec2f = vec2f(f32(DARK_TEXTURE_COORDS.x) * BLOCK_SIZE, f32(DARK_TEXTURE_COORDS.y) * BLOCK_SIZE);

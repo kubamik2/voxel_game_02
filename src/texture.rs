@@ -1,13 +1,26 @@
-use std::io::Read;
+use std::{io::Read, sync::Arc};
 
+#[derive(Clone)]
 pub struct Texture {
-    pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler
+    texture: Arc<wgpu::Texture>,
+    view: Arc<wgpu::TextureView>,
+    sampler: Arc<wgpu::Sampler>
 }
 
 
 impl Texture {
+    pub fn texture(&self) -> &wgpu::Texture {
+        &self.texture
+    }
+
+    pub fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
+
+    pub fn sampler(&self) -> &wgpu::Sampler {
+        &self.sampler
+    }
+
     pub fn from_bytes(device: &wgpu::Device, queue: &wgpu::Queue, bytes: &[u8], label: &str) -> anyhow::Result<Self> {
         let image = image::load_from_memory(bytes)?;
         Ok(Self::from_image(device, queue, image, Some(label)))
@@ -63,7 +76,20 @@ impl Texture {
             ..Default::default()
         });
 
-        Self { texture, view, sampler }
+        Self {
+            texture: Arc::new(texture),
+            view: Arc::new(view),
+            sampler: Arc::new(sampler),
+        }
+    }
+
+    pub fn from_file<P: AsRef<std::path::Path>>(device: &wgpu::Device, queue: &wgpu::Queue, path: P) -> anyhow::Result<Self> {
+        let mut file = std::fs::File::open(path.as_ref())?;
+        let file_name = path.as_ref().file_name().map(|f| f.to_str()).flatten().unwrap_or("texture");
+        let mut bytes = vec![];
+        file.read_to_end(&mut bytes)?;
+
+        Self::from_bytes(device, queue, &bytes, file_name)
     }
 
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -103,7 +129,45 @@ impl Texture {
             ..Default::default()
         });
 
-        Self { texture, view, sampler }
+        Self {
+            texture: Arc::new(texture),
+            view: Arc::new(view),
+            sampler: Arc::new(sampler),
+        }
+    }
+
+    pub fn bind_group_layout_entries(&self, texture_binding: u32, sampler_binding: u32) -> [wgpu::BindGroupLayoutEntry; 2] {
+        [
+            wgpu::BindGroupLayoutEntry {
+                binding: texture_binding,
+                count: None,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: self.texture.sample_count() > 1,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true }, // TODO might be something else across different textures
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: sampler_binding,
+                count: None,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), // TODO same
+                visibility: wgpu::ShaderStages::FRAGMENT,
+            },
+        ]
+    }
+
+    pub fn bind_group_entries(&self, texture_binding: u32, sampler_binding: u32) -> [wgpu::BindGroupEntry; 2] {
+        [
+            wgpu::BindGroupEntry {
+                binding: texture_binding,
+                resource: wgpu::BindingResource::TextureView(&self.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: sampler_binding,
+                resource: wgpu::BindingResource::Sampler(&self.sampler),
+            }
+        ]
     }
 }
 

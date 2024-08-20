@@ -158,7 +158,3 @@ impl DynamicChunkMesh {
         self.parts_meshing_scheduled[chunk_part_index] = false;
     }
 }
-
-pub struct DynamicChunkMeshBundle {
-    meshes: Arc<DynamicChunkMesh>,
-}

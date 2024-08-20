@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use cgmath::{Deg, Matrix4, Point3, Vector3};
 use wgpu::util::DeviceExt;
 
@@ -24,12 +26,10 @@ pub trait Camera {
     }
 }
 
-static VIEW_PROJECTION_BIND_GROUP_LAYOUT: std::sync::OnceLock<wgpu::BindGroupLayout> = std::sync::OnceLock::new();
-
+#[derive(Clone)]
 pub struct ViewProjection {
     view_projection: [[f32; 4]; 4],
-    buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
+    buffer: Arc<wgpu::Buffer>,
 }
 
 impl ViewProjection {
@@ -41,21 +41,11 @@ impl ViewProjection {
             contents: bytemuck::cast_slice(&view_projection),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
         });
-        let bind_group_layout = Self::get_or_init_bind_group_layout(device);
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ViewProjection_bind_group"),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(buffer.as_entire_buffer_binding())
-                }
-            ],
-            layout: bind_group_layout
-        });
-        Self { view_projection, buffer, bind_group }
+
+        Self { view_projection, buffer: Arc::new(buffer) }
     }
 
-    pub fn update_buffer(&mut self, queue: &wgpu::Queue) {
+    pub fn update_buffer(&self, queue: &wgpu::Queue) {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&self.view_projection));
     }
 
@@ -63,27 +53,45 @@ impl ViewProjection {
         self.view_projection = matrix.into();
     }
 
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.bind_group
+    pub fn create_bind_group_layout(device: &wgpu::Device, binding: u32) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("ViewProjection_bind_group_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding,
+                    ty: wgpu::BindingType::Buffer {
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                        ty: wgpu::BufferBindingType::Uniform
+                    },
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    count: None
+                }
+            ]
+        })
+    }
+    
+    pub fn bind_group_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
+        wgpu::BindGroupLayoutEntry {
+            binding,
+            count: None,
+            ty: wgpu::BindingType::Buffer {
+                has_dynamic_offset: false,
+                min_binding_size: None,
+                ty: wgpu::BufferBindingType::Uniform,
+            },
+            visibility: wgpu::ShaderStages::VERTEX,
+        }
     }
 
-    pub fn get_or_init_bind_group_layout(device: &wgpu::Device) -> &wgpu::BindGroupLayout {
-        VIEW_PROJECTION_BIND_GROUP_LAYOUT.get_or_init(||
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("ViewProjectionUniform_bind_group_layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        ty: wgpu::BindingType::Buffer {
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                            ty: wgpu::BufferBindingType::Uniform
-                        },
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        count: None
-                    }
-                ]
-            })
-        )
+    pub fn bind_group_entry(&self, binding: u32) -> wgpu::BindGroupEntry {
+        wgpu::BindGroupEntry {
+            binding,
+            resource: self.buffer.as_entire_binding(),
+        }
+    }
+
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
     }
 }

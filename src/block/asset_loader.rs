@@ -60,7 +60,20 @@ pub fn load_blocks<T: Into<std::path::PathBuf>>(path: T, baked_block_models: &Ba
         for variant in block_deserialize.variants {
             let entry = quad_map.entry(variant.applied_model.clone(), variant.rotation);
             match entry {
-                std::collections::hash_map::Entry::Occupied(_) => {},
+                std::collections::hash_map::Entry::Occupied(occupied) => {
+                    let quad_index_block_model = occupied.get();
+                    let block_model_variant = BlockModelVariant {
+                        applied_model: variant.applied_model,
+                        quad_indices_per_face: quad_index_block_model.quad_indices_per_face.clone(),
+                        texture_indices_per_face: quad_index_block_model.texture_indices_per_face.clone(),
+                        quad_culling_per_face: quad_index_block_model.quad_culling_per_face.clone(),
+                        required_state: variant.required_state,
+                        standalone: variant.standalone,
+                        rotation: variant.rotation,
+                        hitboxes: variant.hitboxes,
+                    };
+                    block_model_variants.push(block_model_variant);
+                },
                 std::collections::hash_map::Entry::Vacant(vacant) => {
                     let mut quad_block_model = baked_block_models.get(&variant.applied_model).unwrap().clone();
                     quad_block_model = create_rotated_quad_model(quad_block_model, variant.rotation);

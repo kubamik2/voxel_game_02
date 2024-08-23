@@ -5,7 +5,7 @@ use std::ops::Index;
 
 use cgmath::Vector3;
 
-use crate::block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::{LightLevel, LightNode}, Block};
+use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::{LightLevel, LightNode}, Block}, BLOCK_LIST};
 
 pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_SIZE_F32: f32 = CHUNK_SIZE as f32;
@@ -20,7 +20,6 @@ pub struct ChunkPart {
     pub block_pallet: BlockPallet,
     pub block_layers: BlockLayers,
     pub light_level_layers: LightLevelLayers,
-    pub light_emitters: Vec<LightNode>,
     pub added_light_emitters: Vec<Vector3<usize>>,
     pub removed_light_emitters: Vec<Vector3<usize>>,
 }
@@ -30,7 +29,7 @@ impl ChunkPart {
         let block_pallet = BlockPallet::new_air();
         let block_layers = BlockLayers::new_uncompressed();
         let light_level_layers = LightLevelLayers::new_uncompressed();
-        Self { block_layers, block_pallet, light_level_layers, light_emitters: vec![], added_light_emitters: vec![], removed_light_emitters: vec![] }
+        Self { block_layers, block_pallet, light_level_layers, added_light_emitters: vec![], removed_light_emitters: vec![] }
     }
 
     fn position_in_bounds(local_position: Vector3<usize>) -> bool {
@@ -38,6 +37,7 @@ impl ChunkPart {
     }
 
     pub fn set_block(&mut self, local_position: Vector3<usize>, block: Block) {
+        let new_block_id = *block.id();
         let Some(old_block_pallet_id) = self.block_layers.get_block_pallet_id(local_position) else { return; };
         let block_pallet_item = self.block_pallet.get_mut(&old_block_pallet_id).unwrap();
         block_pallet_item.count += 1;
@@ -49,19 +49,17 @@ impl ChunkPart {
             self.block_pallet.insert_block(block)
         };
 
-        self.block_layers.set_block_pallet_id(local_position, block_pallet_id)
-    }
-
-    pub fn set_available_block(&mut self, local_position: Vector3<usize>, block: Block) {
-        let (block_pallet_id, item) = self.block_pallet.find_item_mut(&block).unwrap();
-        let old_block_pallet_id = self.block_layers[local_position];
-        if block_pallet_id == old_block_pallet_id { return; }
-
-        item.count += 1;
         self.block_layers.set_block_pallet_id(local_position, block_pallet_id);
-        let old_item = self.block_pallet.get_mut(&old_block_pallet_id).unwrap();
-        assert!(old_item.count > 0);
-        old_item.count -= 1;
+        
+        let old_block_light_level = self.get_block_light_level(local_position).unwrap();
+        let new_block_light_level = BLOCK_LIST.get(new_block_id).unwrap().properties().emitted_light;
+
+        if new_block_light_level > old_block_light_level {
+            self.added_light_emitters.push(local_position)
+        } else if new_block_light_level < old_block_light_level {
+            self.removed_light_emitters.push(local_position);
+            self.added_light_emitters.push(local_position);
+        }
     }
 
     pub fn set_block_pallet_id(&mut self, local_position: Vector3<usize>, block_pallet_id: BlockPalletItemId) {
@@ -81,12 +79,6 @@ impl ChunkPart {
     pub fn get_block(&self, local_position: Vector3<usize>) -> Option<&Block> {
         let Some(block_pallet_id) = self.block_layers.get_block_pallet_id(local_position) else { return None; };
         Some(&self.block_pallet.get(block_pallet_id).unwrap().block)
-    }
-
-    #[inline]
-    pub unsafe fn get_block_unchecked(&self, local_position: Vector3<usize>) -> &Block {
-        let block_pallet_id = self.block_layers.get_block_pallet_id(local_position).unwrap_unchecked();
-        &self.block_pallet.get(block_pallet_id).unwrap_unchecked().block
     }
 
     #[inline]

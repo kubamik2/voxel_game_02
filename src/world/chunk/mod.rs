@@ -5,7 +5,7 @@ use chunk_generator::GenerationStage;
 use chunk_part::{ChunkPart, CHUNK_SIZE};
 use wgpu::util::DeviceExt;
 
-use crate::block::Block;
+use crate::{block::Block, BLOCK_LIST};
 
 use super::PARTS_PER_CHUNK;
 

@@ -191,13 +191,6 @@ impl Player {
 
         let air = BLOCK_MAP.get("air").unwrap().clone().into();
         if self.is_left_mouse_pressed {
-            let Some(changed_block) = chunk_manager.chunk_map.get_block_global(voxel_pos) else { return; };
-            let emitted_light = BLOCK_LIST.get(*changed_block.id()).unwrap().properties().emitted_light;
-            if emitted_light > 0 {
-                let Some(chunk_part) = chunk_manager.chunk_map.get_mut_chunk_part(voxel_pos.chunk) else { return; };
-                chunk_part.removed_light_emitters.push(voxel_pos.local());
-            }
-            
             chunk_manager.chunk_map.set_block_global(voxel_pos, air);
         } else if self.is_right_mouse_pressed {
             voxel_pos = voxel_pos + face.normal_i32();
@@ -205,12 +198,7 @@ impl Player {
                 let Some(block) = chunk_manager.chunk_map.get_block_global(voxel_pos) else { return; };
                 if !BLOCK_LIST.get(*block.id()).unwrap().properties().replaceable { return; }
             }
-            let emitted_light = BLOCK_LIST.get(*block.id()).unwrap().properties().emitted_light;
-            if emitted_light > 0 {
-                let Some(chunk_part) = chunk_manager.chunk_map.get_mut_chunk_part(voxel_pos.chunk) else { return; };
-                chunk_part.set_block_light_level(voxel_pos.local(), emitted_light);
-                chunk_part.added_light_emitters.push(voxel_pos.local());
-            }
+
             chunk_manager.chunk_map.set_block_global(voxel_pos, block);
         } else {
             return;

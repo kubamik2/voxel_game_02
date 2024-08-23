@@ -3,7 +3,7 @@ use std::{collections::VecDeque, fmt::Debug, mem::MaybeUninit, sync::Arc};
 use cgmath::{Vector2, Vector3};
 use hashbrown::{HashMap, HashSet};
 
-use crate::{block::{light::{LightLevel, LightNode, LIGHT_LEVEL_MAX_VALUE}, Block}, world::{chunk::chunk_part::CHUNK_SIZE_I32, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, OBSTRUCTS_LIGHT_CACHE};
+use crate::{block::{light::{LightLevel, LightNode, LIGHT_LEVEL_MAX_VALUE}, Block}, world::{chunk::chunk_part::CHUNK_SIZE_I32, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_LIST, OBSTRUCTS_LIGHT_CACHE};
 
 use super::{chunk_map::ChunkMap, chunk_part::{ChunkPart, CHUNK_SIZE}, Chunk};
 
@@ -168,9 +168,16 @@ impl Area {
     #[inline]
     pub fn propagate_block_light_in_chunk_part(&mut self, chunk_part_index: usize) {
         assert!(chunk_part_index < PARTS_PER_CHUNK);
+        let mut added_light_emitters = vec![];
+        let chunk_part = &mut self.center_chunk_mut().parts[chunk_part_index];
+        std::mem::swap(&mut added_light_emitters, &mut chunk_part.added_light_emitters);
 
         let mut light_node_queue = std::collections::VecDeque::new();
-        light_node_queue.extend(self.get_chunk(Vector2::new(0, 0)).unwrap().parts[chunk_part_index].light_emitters.iter().cloned());
+        while let Some(light_emmiter) = added_light_emitters.pop() {
+            let block = chunk_part.get_block(light_emmiter).unwrap();
+            let level = BLOCK_LIST.get(*block.id()).unwrap().properties().emitted_light;
+            light_node_queue.push_back(LightNode::new(light_emmiter.x as i8, light_emmiter.y as i16 + (chunk_part_index * CHUNK_SIZE) as i16, light_emmiter.z as i8, level));
+        }
 
         while let Some(light_node) = light_node_queue.pop_front() {
             self.step_block_light_node_propagation(light_node, &mut light_node_queue);
@@ -275,6 +282,7 @@ impl Area {
         ]);
     }
 
+    // TODO this is hella inefficient :[
     #[inline]
     pub fn update_sky_light_at(&mut self, position: Vector3<i32>, afflicted_chunk_parts: &mut HashSet<(Vector2<i32>, usize)>) {
         let mut light_node_removal_queue: VecDeque<LightNode> = VecDeque::new();
@@ -339,7 +347,6 @@ impl Area {
 
         let mut visited_nodes = HashMap::new();
         while let Some(light_node) = light_node_propagation_queue.pop_front() {
-            let light_node_position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
             match visited_nodes.entry(((light_node.x as u8 as u32)) | ((light_node.y as u16 as u32) << 8) | ((light_node.z as u8 as u32) << 24)) {
                 hashbrown::hash_map::Entry::Occupied(occupied) => {
                     let level = *occupied.get();
@@ -349,6 +356,7 @@ impl Area {
                     vacant.insert(light_node.level);
                 }
             }
+            let light_node_position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
             let Some((chunk_offset, chunk_part_index)) = self.get_chunk_offset_and_chunk_part_index(light_node_position) else { continue; };
             let Some(chunk) = self.get_chunk(chunk_offset) else { continue; };
             afflicted_chunk_parts.insert((chunk.position, chunk_part_index));
@@ -370,6 +378,11 @@ impl Area {
         fn remove_in_direction(area: &mut Area, direction: Vector3<i32>, light_node_position: Vector3<i32>, light_node_level: u8, light_node_removal_queue: &mut VecDeque<LightNode>, light_node_propagation_queue: &mut VecDeque<LightNode>) {
             let neighbor_position= light_node_position + direction;
             let Some(neighbor_sky_light_level) = area.get_block_light_level(neighbor_position) else { return; };
+            let Some(neighbor_block) = area.get_block(neighbor_position) else { return; };
+            let emitted_light = BLOCK_LIST.get(*neighbor_block.id()).unwrap().properties().emitted_light;
+            if emitted_light > 0 {
+                light_node_propagation_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8, emitted_light));
+            }
             if neighbor_sky_light_level < light_node_level && neighbor_sky_light_level != 0 {
                 area.set_block_light_level(neighbor_position, 0);
                 light_node_removal_queue.push_back(LightNode::new(neighbor_position.x as i8, neighbor_position.y as i16, neighbor_position.z as i8, neighbor_sky_light_level));
@@ -418,9 +431,14 @@ impl Area {
         }
     }
 
-    pub fn propagate_block_light_at(&mut self, position: Vector3<i32>, afflicted_chunk_parts: &mut HashSet<(Vector2<i32>, usize)>) {
+    pub fn add_block_light_at(&mut self, position: Vector3<i32>, afflicted_chunk_parts: &mut HashSet<(Vector2<i32>, usize)>) {
         let mut light_node_queue = VecDeque::new();
-        let Some(block_level) = self.get_block_light_level(position) else { return; };
+        let Some(block) = self.get_block(position) else { return; };
+        let block_level = BLOCK_LIST.get(*block.id()).unwrap().properties().emitted_light;
+        let Some(current_block_level) = self.get_block_light_level(position) else { return; };
+        if current_block_level >= block_level { return; }
+        self.set_block_light_level(position, block_level);
+
         if block_level <= 1 { return; }
         light_node_queue.push_back(LightNode::new(position.x as i8 + 1, position.y as i16, position.z as i8, block_level - 1));
         light_node_queue.push_back(LightNode::new(position.x as i8, position.y as i16 + 1, position.z as i8, block_level - 1));

@@ -8,6 +8,7 @@ pub struct GameLogicLayer {
     world: World,
     interval_300hz: Interval,
     interval_60hz: Interval,
+    interval_20hz: Interval,
     keyboard_input_reader: EventReader<KeyboardInputEvent>,
     mouse_input_reader: EventReader<MouseInputEvent>,
     mouse_move_reader: EventReader<MouseMoveEvent>,
@@ -19,9 +20,9 @@ impl Layer for GameLogicLayer {
             self.world.chunk_manager.update(&game.device);
         });
 
-        self.interval_60hz.tick(|| {
+        self.interval_20hz.tick(|| {
             self.world.chunk_manager.insert_chunks_around_player(Vector2::new(0, 0));
-            self.world.player.modify_block(&mut self.world.chunk_manager, BLOCK_MAP.get("torch").unwrap().clone().into());
+            self.world.player.modify_block(&mut self.world.chunk_manager, BLOCK_MAP.get("stone").unwrap().clone().into());
             while let Some(changed_block_position) = self.world.chunk_manager.changed_blocks.pop() {
                 let mut afflicted_chunk_parts = hashbrown::HashSet::new();
                 let Some(chunk_part) = self.world.chunk_manager.chunk_map.get_mut_chunk_part(changed_block_position.chunk) else { continue; };
@@ -40,7 +41,7 @@ impl Layer for GameLogicLayer {
 
                 while let Some(light_local_position) = added_light_emitters.pop() {
                     let area_position = light_local_position.map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0);
-                    area.propagate_block_light_at(area_position, &mut afflicted_chunk_parts);
+                    area.add_block_light_at(area_position, &mut afflicted_chunk_parts);
                 }
 
                 for chunk in area.chunks {
@@ -60,7 +61,7 @@ impl Layer for GameLogicLayer {
 
         for event in self.mouse_input_reader.read(events) {
             self.world.player.handle_mouse_input(event.button, event.pressed);
-            self.world.player.modify_block(&mut self.world.chunk_manager, BLOCK_MAP.get("torch").unwrap().clone().into());
+            self.world.player.modify_block(&mut self.world.chunk_manager, BLOCK_MAP.get("stone").unwrap().clone().into());
         }
 
         for event in self.mouse_move_reader.read(events) {
@@ -83,6 +84,7 @@ impl GameLogicLayer {
             world: World::new(device, queue, surface_config, settings)?,
             interval_300hz: Interval::new_hz(300.0),
             interval_60hz: Interval::new_hz(60.0),
+            interval_20hz: Interval::new_hz(20.0),
             keyboard_input_reader: EventReader::new(events),
             mouse_input_reader: EventReader::new(events),
             mouse_move_reader: EventReader::new(events),

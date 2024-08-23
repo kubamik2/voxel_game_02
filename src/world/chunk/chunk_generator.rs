@@ -82,7 +82,6 @@ impl ChunkGenerator {
     }
 
     fn shape(chunk: &mut Chunk) {
-        // let now = std::time::Instant::now();
         let offset_x = (chunk.position.x * CHUNK_SIZE as i32) as f32;
         let offset_y = (chunk.position.y * CHUNK_SIZE as i32) as f32;
         for (chunk_part_index, part) in chunk.parts.iter_mut().enumerate() {
@@ -118,7 +117,6 @@ impl ChunkGenerator {
             }
         }
         chunk.maintain_parts();
-        // dbg!(now.elapsed());
         chunk.generation_stage = GenerationStage::Shape;
     }
 
@@ -165,8 +163,8 @@ impl ChunkGenerator {
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 if fbm[x + z * CHUNK_SIZE] > 0.06 {
-                    let (highest_block_chunk_part_index, highest_y) = area.center_chunk().highest_blocks[x + z * CHUNK_SIZE];
-                    let highest_y = (highest_y as usize + highest_block_chunk_part_index as usize * CHUNK_SIZE) as i32;
+                    let (highest_block_chunk_part_index, highest_chunk_part_y) = area.center_chunk().highest_blocks[x + z * CHUNK_SIZE];
+                    let highest_y = (highest_chunk_part_y as usize + highest_block_chunk_part_index as usize * CHUNK_SIZE) as i32;
                     let tree = STRUCTURES.get("tree").unwrap();
 
                     area.insert_structure(tree, Vector3::new(x as i32, highest_y + 1, z as i32));

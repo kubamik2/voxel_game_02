@@ -37,7 +37,8 @@ impl ChunkPart {
     }
 
     pub fn set_block(&mut self, local_position: Vector3<usize>, block: Block) {
-        let new_block_id = *block.id();
+        let new_block_light_level = block.properties().emitted_light;
+
         let Some(old_block_pallet_id) = self.block_layers.get_block_pallet_id(local_position) else { return; };
         let block_pallet_item = self.block_pallet.get_mut(&old_block_pallet_id).unwrap();
         block_pallet_item.count += 1;
@@ -52,14 +53,8 @@ impl ChunkPart {
         self.block_layers.set_block_pallet_id(local_position, block_pallet_id);
         
         let old_block_light_level = self.get_block_light_level(local_position).unwrap();
-        let new_block_light_level = BLOCK_LIST.get(new_block_id).unwrap().properties().emitted_light;
-
-        if new_block_light_level > old_block_light_level {
-            self.added_light_emitters.push(local_position)
-        } else if new_block_light_level < old_block_light_level {
-            self.removed_light_emitters.push(local_position);
-            self.added_light_emitters.push(local_position);
-        }
+        self.set_block_light_level(local_position, new_block_light_level);
+        self.set_sky_light_level(local_position, 0);
     }
 
     pub fn set_block_pallet_id(&mut self, local_position: Vector3<usize>, block_pallet_id: BlockPalletItemId) {
@@ -105,6 +100,22 @@ impl ChunkPart {
         let Some(mut light_level) = self.light_level_layers.get_light_level(local_position).cloned() else { return; };
         light_level.set_sky(level);
         self.light_level_layers.set_light_level(local_position, light_level);
+    }
+
+    #[inline]
+    pub fn get_light_level(&self, local_position: Vector3<usize>) -> Option<LightLevel> {
+        self.light_level_layers.get_light_level(local_position).cloned()
+    }
+
+
+    #[inline]
+    pub fn set_light_level(&mut self, local_position: Vector3<usize>, light_level: LightLevel) {
+        self.light_level_layers.set_light_level(local_position, light_level);
+    }
+
+    pub fn compress(&mut self) {
+        self.block_layers.compress();
+        self.light_level_layers.compress();
     }
 }
 

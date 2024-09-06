@@ -1,46 +1,11 @@
 {
-    "cuboids": [
-        {
-            "start": [0.0, 0.0, 0.0],
-            "end": [1.0, 1.0, 1.0],
-            "faces": [
-                {
-                    "uv_start": [0.0, 1.0],
-                    "uv_end": [1.0, 0.0],
-                    "texture_index": 2,
-                    "culling": true
-                },
-                {
-                    "uv_start": [0.0, 1.0],
-                    "uv_end": [1.0, 0.0],
-                    "texture_index": 2,
-                    "culling": true
-                },
-                {
-                    "uv_start": [0.0, 1.0],
-                    "uv_end": [1.0, 0.0],
-                    "texture_index": 2,
-                    "culling": true
-                },
-                {
-                    "uv_start": [0.0, 1.0],
-                    "uv_end": [1.0, 0.0],
-                    "texture_index": 2,
-                    "culling": true
-                },
-                {
-                    "uv_start": [0.0, 1.0],
-                    "uv_end": [1.0, 0.0],
-                    "texture_index": 3,
-                    "culling": true
-                },
-                {
-                    "uv_start": [0.0, 1.0],
-                    "uv_end": [1.0, 0.0],
-                    "texture_index": 1,
-                    "culling": true
-                }
-            ]
-        }
-    ]
+    "parent_model": "cube",
+    "texture_overrides": {
+        "+x": 2,
+        "-x": 2,
+        "+z": 2,
+        "-z": 2,
+        "+y": 3,
+        "-y": 1
+    }
 }

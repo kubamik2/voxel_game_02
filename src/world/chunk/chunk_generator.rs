@@ -5,7 +5,7 @@ use hashbrown::HashSet;
 
 use crate::{block::Block, thread_work_dispatcher::ThreadWorkDispatcher, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP, STRUCTURES};
 
-use super::{area::Area, chunk_map::ChunkMap, chunk_part::CHUNK_SIZE, Chunk};
+use super::{chunks3x3::Chunks3x3, chunk_map::ChunkMap, chunk_part::CHUNK_SIZE, Chunk};
 
 lazy_static::lazy_static! {
     static ref DBG: Arc<Mutex<(usize, std::time::Duration, std::time::Duration, std::time::Duration)>> = Arc::new(Mutex::new((0, std::time::Duration::ZERO, std::time::Duration::ZERO, std::time::Duration::MAX)));
@@ -14,12 +14,12 @@ lazy_static::lazy_static! {
 #[derive(Debug)]
 pub enum ChunkGeneratorInput {
     Chunk(Arc<Chunk>),
-    Area(Area)
+    Chunks3x3(Chunks3x3)
 }
 
 pub enum ChunkGeneratorOutput {
     Chunk(Arc<Chunk>),
-    Area(Area)
+    Chunks3x3(Chunks3x3)
 }
 
 #[repr(u8)]
@@ -50,13 +50,13 @@ impl ChunkGenerator {
     pub fn generate_chunk_to_next_stage(&mut self, current_stage: GenerationStage, chunk_map: &mut ChunkMap, chunk_position: Vector2<i32>, scheduled_generations: &mut HashSet<Vector2<i32>>) {
         #[inline]
         fn create_input_area(chunk_map: &mut ChunkMap, chunk_position: Vector2<i32>, scheduled_generations: &mut HashSet<Vector2<i32>>) -> Option<ChunkGeneratorInput> {
-            let Some(area) = Area::new(chunk_map, chunk_position) else { return None; };
+            let Some(chunks3x3) = Chunks3x3::new(chunk_map, chunk_position) else { return None; };
             for z in -1..=1 {
                 for x in -1..=1 {
                     scheduled_generations.insert(chunk_position + Vector2::new(x, z));
                 }
             }
-            Some(ChunkGeneratorInput::Area(area))
+            Some(ChunkGeneratorInput::Chunks3x3(chunks3x3))
         }
 
         #[inline]
@@ -120,8 +120,8 @@ impl ChunkGenerator {
         chunk.generation_stage = GenerationStage::Shape;
     }
 
-    fn terrain(area: &mut Area) {
-        let center_chunk = area.get_chunk_mut(Vector2::new(0, 0)).unwrap();
+    fn terrain(chunks3x3: &mut Chunks3x3) {
+        let center_chunk = chunks3x3.get_chunk_mut(Vector2::new(0, 0)).unwrap();
         let grass: Block = BLOCK_MAP.get("grass").unwrap().clone().into();
         for y in 0..CHUNK_HEIGHT {
             for z in 0..CHUNK_SIZE {
@@ -146,8 +146,8 @@ impl ChunkGenerator {
         center_chunk.generation_stage = GenerationStage::Terrain;
     }
 
-    fn decoration(area: &mut Area) {
-        let center_chunk = area.get_chunk(Vector2::new(0, 0)).unwrap();
+    fn decoration(chunks3x3: &mut Chunks3x3) {
+        let center_chunk = chunks3x3.get_chunk(Vector2::new(0, 0)).unwrap();
         let offset_x = (center_chunk.position.x * CHUNK_SIZE as i32) as f32;
         let offset_y = (center_chunk.position.y * CHUNK_SIZE as i32) as f32;
         let fbm = simdnoise::NoiseBuilder::fbm_2d_offset(
@@ -163,23 +163,23 @@ impl ChunkGenerator {
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 if fbm[x + z * CHUNK_SIZE] > 0.06 {
-                    let (highest_block_chunk_part_index, highest_chunk_part_y) = area.center_chunk().highest_blocks[x + z * CHUNK_SIZE];
+                    let (highest_block_chunk_part_index, highest_chunk_part_y) = chunks3x3.center_chunk().highest_blocks[x + z * CHUNK_SIZE];
                     let highest_y = (highest_chunk_part_y as usize + highest_block_chunk_part_index as usize * CHUNK_SIZE) as i32;
                     let tree = STRUCTURES.get("tree").unwrap();
 
-                    area.insert_structure(tree, Vector3::new(x as i32, highest_y + 1, z as i32));
+                    chunks3x3.insert_structure(tree, Vector3::new(x as i32, highest_y + 1, z as i32));
                 }
             }
         }
-        area.center_chunk_mut().generation_stage = GenerationStage::Decoration;
+        chunks3x3.center_chunk_mut().generation_stage = GenerationStage::Decoration;
     }
 
-    fn light_emit(area: &mut Area) {
+    fn light_emit(chunks3x3: &mut Chunks3x3) {
         let now = std::time::Instant::now();
-        area.propagate_sky_light();
-        for chunk_part_index in 0..PARTS_PER_CHUNK {
-            area.propagate_block_light_in_chunk_part(chunk_part_index);
-        }
+        chunks3x3.propagate_sky_light();
+        // for chunk_part_index in 0..PARTS_PER_CHUNK {
+        //     chunks3x3.propagate_block_light_in_chunk_part(chunk_part_index);
+        // }
         // let elapsed = now.elapsed();
         // let mut dbg = DBG.lock().unwrap();
         // dbg.0 += 1;
@@ -191,7 +191,7 @@ impl ChunkGenerator {
         //     dbg.3 = elapsed;
         // }
         // println!("num: {: <5} sum: {: <8.2?} avg: {: <8.2?} max: {: <8.2?} min: {: <8.2?}", dbg.0, dbg.1, dbg.1 / dbg.0 as u32, dbg.2, dbg.3);
-        area.get_chunk_mut(Vector2::new(0, 0)).unwrap().generation_stage = GenerationStage::Light;
+        chunks3x3.get_chunk_mut(Vector2::new(0, 0)).unwrap().generation_stage = GenerationStage::Light;
     }
 
     fn run(receiver: Receiver<ChunkGeneratorInput>, sender: Sender<ChunkGeneratorOutput>) {
@@ -208,7 +208,7 @@ impl ChunkGenerator {
 
                     sender.send(ChunkGeneratorOutput::Chunk(chunk)).unwrap();
                 },
-                ChunkGeneratorInput::Area(mut area) => {
+                ChunkGeneratorInput::Chunks3x3(mut area) => {
                     match area.get_chunk(Vector2::new(0, 0)).unwrap().generation_stage {
                         GenerationStage::Shape => Self::terrain(&mut area),
                         GenerationStage::Terrain => Self::decoration(&mut area),
@@ -216,7 +216,7 @@ impl ChunkGenerator {
                         _ => panic!("invalid gen input")
                     }
 
-                    sender.send(ChunkGeneratorOutput::Area(area)).unwrap();
+                    sender.send(ChunkGeneratorOutput::Chunks3x3(area)).unwrap();
                 }
             }
         }

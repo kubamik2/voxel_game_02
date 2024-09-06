@@ -55,7 +55,6 @@ impl Game {
             label: Some("device"),
             required_features: Features::BUFFER_BINDING_ARRAY | Features::STORAGE_RESOURCE_BINDING_ARRAY | Features::MULTI_DRAW_INDIRECT,
             required_limits,
-            ..Default::default()
         }, None).await?;
 
         let surface_capabilities = surface.get_capabilities(&adapter);

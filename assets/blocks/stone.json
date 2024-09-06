@@ -1,12 +1,7 @@
 {
     "variants": [
         {
-            "applied_model": "stone",
-            "required_state": [
-                
-            ],
-            "standalone": true,
-            "rotation": [0.0, 0.0, 0.0],
+            "model": "stone",
             "hitboxes": [
                 {
                     "start": [0.0, 0.0, 0.0],

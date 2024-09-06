@@ -16,7 +16,7 @@ impl GlobalVecF {
     }
 
     #[inline]
-    pub fn apply_bounds(&mut self) {
+    pub fn apply_invariants(&mut self) {
         let (div_x, rem_x) = self.local.x.div_rem_euclid(&CHUNK_SIZE_F32);
         let (div_y, rem_y) = self.local.y.div_rem_euclid(&CHUNK_SIZE_F32);
         let (div_z, rem_z) = self.local.z.div_rem_euclid(&CHUNK_SIZE_F32);
@@ -35,7 +35,7 @@ impl GlobalVecF {
     #[inline]
     pub fn edit<F: FnMut(&mut Self)>(&mut self, mut f: F) {
         f(self);
-        self.apply_bounds();
+        self.apply_invariants();
     }
 
     #[inline]
@@ -75,8 +75,13 @@ impl GlobalVecF {
     #[inline]
     pub fn ceil(mut self) -> Self {
         self.local = self.local.map(|f| f.ceil());
-        self.apply_bounds();
+        self.apply_invariants();
         self
+    }
+
+    #[inline]
+    pub fn in_bounds(&self) -> bool {
+        self.chunk.y > 0 && self.chunk.y < CHUNK_SIZE_I32
     }
 }
 
@@ -85,7 +90,7 @@ impl Add<Vector3<f32>> for GlobalVecF {
     #[inline]
     fn add(mut self, rhs: Vector3<f32>) -> Self::Output {
         self.local += rhs;
-        self.apply_bounds();
+        self.apply_invariants();
         self
     }
 }
@@ -94,7 +99,7 @@ impl AddAssign<Vector3<f32>> for GlobalVecF {
     #[inline]
     fn add_assign(&mut self, rhs: Vector3<f32>) {
         self.local += rhs;
-        self.apply_bounds();
+        self.apply_invariants();
     }
 }
 
@@ -103,7 +108,7 @@ impl Sub<Vector3<f32>> for GlobalVecF {
     #[inline]
     fn sub(mut self, rhs: Vector3<f32>) -> Self::Output {
         self.local -= rhs;
-        self.apply_bounds();
+        self.apply_invariants();
         self
     }
 }
@@ -112,7 +117,7 @@ impl SubAssign<Vector3<f32>> for GlobalVecF {
     #[inline]
     fn sub_assign(&mut self, rhs: Vector3<f32>) {
         self.local -= rhs;
-        self.apply_bounds();
+        self.apply_invariants();
     }
 }
 
@@ -122,7 +127,7 @@ impl Add<GlobalVecF> for GlobalVecF {
     fn add(mut self, rhs: GlobalVecF) -> Self::Output {
         self.local += rhs.local;
         self.chunk += rhs.chunk;
-        self.apply_bounds();
+        self.apply_invariants();
         self
     }
 }
@@ -132,7 +137,7 @@ impl AddAssign<GlobalVecF> for GlobalVecF {
     fn add_assign(&mut self, rhs: GlobalVecF) {
         self.local += rhs.local;
         self.chunk += rhs.chunk;
-        self.apply_bounds();
+        self.apply_invariants();
     }
 }
 
@@ -142,7 +147,7 @@ impl Sub<GlobalVecF> for GlobalVecF {
     fn sub(mut self, rhs: GlobalVecF) -> Self::Output {
         self.local -= rhs.local;
         self.chunk -= rhs.chunk;
-        self.apply_bounds();
+        self.apply_invariants();
         self
     }
 }
@@ -152,7 +157,7 @@ impl SubAssign<GlobalVecF> for GlobalVecF {
     fn sub_assign(&mut self, rhs: GlobalVecF) {
         self.local -= rhs.local;
         self.chunk -= rhs.chunk;
-        self.apply_bounds();
+        self.apply_invariants();
     }
 }
 
@@ -162,7 +167,7 @@ impl Add<GlobalVecU> for GlobalVecF {
     fn add(mut self, rhs: GlobalVecU) -> Self::Output {
         self.local += rhs.local.map(|f| f as f32);
         self.chunk += rhs.chunk;
-        self.apply_bounds();
+        self.apply_invariants();
         self
     }
 }
@@ -172,7 +177,7 @@ impl AddAssign<GlobalVecU> for GlobalVecF {
     fn add_assign(&mut self, rhs: GlobalVecU) {
         self.local += rhs.local.map(|f| f as f32);
         self.chunk += rhs.chunk;
-        self.apply_bounds();
+        self.apply_invariants();
     }
 }
 
@@ -182,7 +187,7 @@ impl Add<GlobalVecF> for GlobalVecU {
     fn add(self, mut rhs: GlobalVecF) -> Self::Output {
         rhs.local += self.local.map(|f| f as f32);
         rhs.chunk += self.chunk;
-        rhs.apply_bounds();
+        rhs.apply_invariants();
         rhs
     }
 }
@@ -193,7 +198,7 @@ impl Sub<GlobalVecU> for GlobalVecF {
     fn sub(mut self, rhs: GlobalVecU) -> Self::Output {
         self.local -= rhs.local.map(|f| f as f32);
         self.chunk -= rhs.chunk;
-        self.apply_bounds();
+        self.apply_invariants();
         self
     }
 }
@@ -203,7 +208,7 @@ impl SubAssign<GlobalVecU> for GlobalVecF {
     fn sub_assign(&mut self, rhs: GlobalVecU) {
         self.local -= rhs.local.map(|f| f as f32);
         self.chunk -= rhs.chunk;
-        self.apply_bounds();
+        self.apply_invariants();
     }
 }
 
@@ -213,7 +218,7 @@ impl Sub<GlobalVecF> for GlobalVecU {
     fn sub(self, mut rhs: GlobalVecF) -> Self::Output {
         rhs.local -= self.local.map(|f| f as f32);
         rhs.chunk -= self.chunk;
-        rhs.apply_bounds();
+        rhs.apply_invariants();
         rhs
     }
 }
@@ -222,7 +227,7 @@ impl From<Vector3<f32>> for GlobalVecF {
     #[inline]
     fn from(value: Vector3<f32>) -> Self {
         let mut rel_vec = GlobalVecF { local: value, chunk: Vector3 { x: 0, y: 0, z: 0 } };
-        rel_vec.apply_bounds();
+        rel_vec.apply_invariants();
         rel_vec
     }
 }
@@ -380,7 +385,7 @@ impl GlobalVecU {
     }
 
     #[inline]
-    pub fn apply_bounds(&mut self) {
+    pub fn apply_invariants(&mut self) {
         let (div_x, rem_x) = self.local.x.div_rem_euclid(&CHUNK_SIZE_I32);
         let (div_y, rem_y) = self.local.y.div_rem_euclid(&CHUNK_SIZE_I32);
         let (div_z, rem_z) = self.local.z.div_rem_euclid(&CHUNK_SIZE_I32);
@@ -399,7 +404,7 @@ impl GlobalVecU {
     #[inline]
     pub fn edit<F: FnMut(&mut Self)>(&mut self, mut f: F) {
         f(self);
-        self.apply_bounds();
+        self.apply_invariants();
     }
 
     #[inline]
@@ -418,6 +423,11 @@ impl GlobalVecU {
     #[inline]
     pub fn interpolate_voxels(&self, direction: Vector3<f32>, range: f32) -> InterpolateVoxelsIter {
         InterpolateVoxelsIter::new((*self).into(), direction, range)
+    }
+
+    #[inline]
+    pub fn in_bounds(&self) -> bool {
+        self.chunk.y > 0 && self.chunk.y < CHUNK_SIZE_I32
     }
 }
 
@@ -440,7 +450,7 @@ impl Add<Vector3<i32>> for GlobalVecU {
     #[inline]
     fn add(mut self, rhs: Vector3<i32>) -> Self::Output {
         self.local += rhs;
-        self.apply_bounds();
+        self.apply_invariants();
         self
     }
 }
@@ -449,7 +459,7 @@ impl AddAssign<Vector3<i32>> for GlobalVecU {
     #[inline]
     fn add_assign(&mut self, rhs: Vector3<i32>) {
         self.local += rhs;
-        self.apply_bounds();
+        self.apply_invariants();
     }
 }
 
@@ -458,7 +468,7 @@ impl Sub<Vector3<i32>> for GlobalVecU {
     #[inline]
     fn sub(mut self, rhs: Vector3<i32>) -> Self::Output {
         self.local -= rhs;
-        self.apply_bounds();
+        self.apply_invariants();
         self
     }
 }
@@ -467,7 +477,7 @@ impl SubAssign<Vector3<i32>> for GlobalVecU {
     #[inline]
     fn sub_assign(&mut self, rhs: Vector3<i32>) {
         self.local -= rhs;
-        self.apply_bounds();
+        self.apply_invariants();
     }
 }
 

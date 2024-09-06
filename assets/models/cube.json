@@ -1,0 +1,46 @@
+{
+    "cuboids": [
+        {
+            "start": [0.0, 0.0, 0.0],
+            "end": [1.0, 1.0, 1.0],
+            "faces": {
+                "+x": {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture": "+x",
+                    "culling": true
+                },
+                "-x": {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture": "-x",
+                    "culling": true
+                },
+                "+z": {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture": "+z",
+                    "culling": true
+                },
+                "-z": {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture": "-z",
+                    "culling": true
+                },
+                "+y": {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture": "+y",
+                    "culling": true
+                },
+                "-y": {
+                    "uv_start": [0.0, 1.0],
+                    "uv_end": [1.0, 0.0],
+                    "texture": "-y",
+                    "culling": true
+                }
+            }
+        }
+    ]
+}

@@ -1,12 +1,7 @@
 {
     "variants": [
         {
-            "applied_model": "dirt",
-            "required_state": [
-                
-            ],
-            "standalone": true,
-            "rotation": [0.0, 0.0, 0.0],
+            "model": "dirt",
             "hitboxes": [
                 {
                     "start": [0.0, 0.0, 0.0],

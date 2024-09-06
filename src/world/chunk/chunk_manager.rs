@@ -85,10 +85,10 @@ impl ChunkManager {
                     self.scheduled_generations.remove(&chunk.position);
                     self.chunk_map.insert_arc(chunk.position, chunk);
                 },
-                ChunkGeneratorOutput::Area(area) => {
+                ChunkGeneratorOutput::Chunks3x3(area) => {
                     for chunk in area.chunks {
                         self.scheduled_generations.remove(&chunk.position);
-                        self.chunk_map.insert_arc(chunk.position, chunk);
+                        self.chunk_map.insert(chunk.position, chunk);
                     }
                 },
             }

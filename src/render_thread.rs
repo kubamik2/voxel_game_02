@@ -71,7 +71,11 @@ impl RenderThreadInner {
     }
 
     fn render(&mut self, args: RenderArgs, commands: Box<[RenderCommand]>) {
-        let output = args.surface.get_current_texture().unwrap();
+        let Ok(output) = args.surface.get_current_texture() else {
+            self.work_done_sender.send(()).expect("render_thread work_done_sender.send() failed");
+            println!("fail");
+            return;
+        };
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render_thread command encoder") });
 

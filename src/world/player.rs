@@ -99,13 +99,13 @@ impl Player {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, dt: f32) {
         let forward = Vector3::new(self.direction.x, 0.0, self.direction.z).normalize();
         let right = forward.cross(Vector3::unit_y());
 
         let mut horizontal_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
         let mut vertical_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
-        let speed = 0.04;
+        let speed = 4.0 * dt;
 
         if self.is_forward_pressed {
             horizontal_movement_vector += forward;
@@ -125,11 +125,11 @@ impl Player {
 
 
         if self.is_up_pressed {
-            vertical_movement_vector += Vector3::unit_y() * speed;
+            vertical_movement_vector += Vector3::unit_y();
         }
 
         if self.is_down_pressed {
-            vertical_movement_vector -= Vector3::unit_y() * speed;
+            vertical_movement_vector -= Vector3::unit_y();
         }
 
 
@@ -139,7 +139,7 @@ impl Player {
         }
 
         if vertical_movement_vector.magnitude2() > 0.0 {
-            self.position += vertical_movement_vector * speed * 10.0;
+            self.position += vertical_movement_vector * speed;
         }
     }
 
@@ -152,8 +152,8 @@ impl Player {
         
         for voxel_pos in self.position.interpolate_voxels(self.direction, 5.0) {
             let Some(block) = chunk_manager.chunk_map.get_block_global(voxel_pos) else { continue; };
-            let block_info = BLOCK_LIST.get(*block.id()).unwrap();
-            if !block_info.properties().targetable { continue; }
+            let block_info = BLOCK_LIST.get(block.id()).unwrap();
+            if !block.properties().targetable { continue; }
             let Some(variants) = BLOCK_MODEL_VARIANTS.get_model_variants(block) else { continue; };
 
             let ray = Ray::new(self.position, self.direction, 5.0);
@@ -196,7 +196,7 @@ impl Player {
             voxel_pos = voxel_pos + face.normal_i32();
             {
                 let Some(block) = chunk_manager.chunk_map.get_block_global(voxel_pos) else { return; };
-                if !BLOCK_LIST.get(*block.id()).unwrap().properties().replaceable { return; }
+                if !block.properties().replaceable { return; }
             }
 
             chunk_manager.chunk_map.set_block_global(voxel_pos, block);
@@ -219,6 +219,7 @@ impl Player {
                 }
             }
         }
+        mark_chunk_part_for_meshing(chunk_manager, Vector2::new(0, 0), voxel_pos);
 
         if voxel_pos.local().x == 0 {
             mark_chunk_part_for_meshing(chunk_manager, Vector2::new(-1, 0), voxel_pos);

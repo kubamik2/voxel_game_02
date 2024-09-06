@@ -1,12 +1,7 @@
 {
     "variants": [
         {
-            "applied_model": "cobblestone",
-            "required_state": [
-                
-            ],
-            "standalone": true,
-            "rotation": [0.0, 0.0, 0.0],
+            "model": "cobblestone",
             "hitboxes": [
                 {
                     "start": [0.0, 0.0, 0.0],

@@ -21,7 +21,7 @@ impl World {
         let chunk_renderer = ChunkRenderer::new(device, queue, surface_config)?;
 
         Ok(Self {
-            chunk_manager: ChunkManager::new(settings.render_distance, 16, 12),
+            chunk_manager: ChunkManager::new(settings.render_distance, 8, 4),
             chunk_renderer,
             player: Player::new(),
         })

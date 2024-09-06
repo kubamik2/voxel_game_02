@@ -1,6 +1,6 @@
 {
-    "resolution": [1600, 900],
+    "resolution": [1600, 1000],
     "fullscreen": false,
     "borderless": false,
-    "render_distance": 16
+    "render_distance": 8
 }

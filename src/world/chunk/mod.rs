@@ -15,7 +15,7 @@ pub mod chunk_part;
 pub mod chunk_mesh_map;
 pub mod chunk_manager;
 pub mod chunk_generator;
-pub mod area;
+pub mod chunks3x3;
 pub mod chunk_renderer;
 
 #[derive(Clone)]
@@ -65,8 +65,7 @@ impl Chunk {
 
     pub fn compress_parts(&mut self) {
         for part in self.parts.iter_mut() {
-            part.block_layers.compress();
-            part.light_level_layers.compress();
+            part.compress();
         }
     }
 

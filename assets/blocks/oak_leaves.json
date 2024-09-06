@@ -1,12 +1,7 @@
 {
     "variants": [
         {
-            "applied_model": "oak_leaves",
-            "required_state": [
-                
-            ],
-            "standalone": true,
-            "rotation": [0.0, 0.0, 0.0],
+            "model": "oak_leaves",
             "hitboxes": [
                 {
                     "start": [0.0, 0.0, 0.0],
@@ -15,8 +10,8 @@
             ]
         }
     ],
-    "properties": {
+    "base_properties": {
         "alpha_mode": "Transparent",
-        "obstructs_light": false
+        "light_attenuation": [0, 0, 0, 0, 0, 0]
     }
 }

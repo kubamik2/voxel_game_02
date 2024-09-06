@@ -1,0 +1,11 @@
+{
+    "parent_model": "cube_no_culling",
+    "texture_overrides": {
+        "+x": "all",
+        "-x": "all",
+        "+z": "all",
+        "-z": "all",
+        "+y": "all",
+        "-y": "all"
+    }
+}

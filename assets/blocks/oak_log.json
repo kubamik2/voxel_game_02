@@ -1,12 +1,7 @@
 {
     "variants": [
         {
-            "applied_model": "oak_log",
-            "required_state": [
-                
-            ],
-            "standalone": true,
-            "rotation": [0.0, 0.0, 0.0],
+            "model": "oak_log",
             "hitboxes": [
                 {
                     "start": [0.0, 0.0, 0.0],

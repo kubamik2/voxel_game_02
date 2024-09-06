@@ -1,12 +1,7 @@
 {
     "variants": [
         {
-            "applied_model": "grass",
-            "required_state": [
-                
-            ],
-            "standalone": true,
-            "rotation": [0.0, 0.0, 0.0],
+            "model": "grass",
             "hitboxes": [
                 {
                     "start": [0.0, 0.0, 0.0],

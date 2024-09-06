@@ -6,7 +6,6 @@ use crate::{block::light::LightLevel, global_vector::GlobalVecF, world::World};
 pub mod egui_renderer;
 pub struct DebugGui {
     pub position: GlobalVecF,
-    pub direction: Vector3<f32>,
     pub light_level: LightLevel,
     pub last_frame_time: std::time::Duration,
 }
@@ -15,8 +14,7 @@ impl DebugGui {
     pub fn new(world: &World, last_frame_time: std::time::Duration) -> Self {
         Self {
             position: world.player.position,
-            direction: world.player.direction,
-            light_level: world.chunk_manager.chunk_map.get_light_level_global(world.player.position.into()).map(|f| *f).unwrap_or(LightLevel::new(0, 0).unwrap()),
+            light_level: world.chunk_manager.chunk_map.get_light_level(world.player.position.into()).unwrap_or(LightLevel::new(0, 0).unwrap()),
             last_frame_time,
         }
     }

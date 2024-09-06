@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use cgmath::{Vector2, Vector3};
 
-use crate::{game::Game, camera::Camera, event::{EventReader, Events}, game_window::{KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, gui::DebugGui, interval::Interval, layer::Layer, settings::Settings, world::{chunk::{area::Area, chunk_part::CHUNK_SIZE_I32, dynamic_chunk_mesh::DynamicChunkMesh}, World}, BLOCK_MAP};
+use crate::{game::Game, camera::Camera, event::{EventReader, Events}, game_window::{KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, gui::DebugGui, interval::Interval, layer::Layer, settings::Settings, world::{chunk::{chunks3x3::Chunks3x3, chunk_part::CHUNK_SIZE_I32, dynamic_chunk_mesh::DynamicChunkMesh}, World}, BLOCK_MAP};
 
 pub struct GameLogicLayer {
     world: World,
@@ -24,33 +24,28 @@ impl Layer for GameLogicLayer {
             self.world.chunk_manager.insert_chunks_around_player(Vector2::new(0, 0));
             self.world.player.modify_block(&mut self.world.chunk_manager, BLOCK_MAP.get("stone").unwrap().clone().into());
             while let Some(changed_block_position) = self.world.chunk_manager.changed_blocks.pop() {
-                let mut afflicted_chunk_parts = hashbrown::HashSet::new();
+                let mut inner_chunk_position = changed_block_position.local().map(|f| f as i32);
+                inner_chunk_position.y += changed_block_position.chunk.y * CHUNK_SIZE_I32;
+
                 let Some(chunk_part) = self.world.chunk_manager.chunk_map.get_mut_chunk_part(changed_block_position.chunk) else { continue; };
                 
                 let mut removed_light_emitters = std::mem::take(&mut chunk_part.removed_light_emitters);
                 let mut added_light_emitters = std::mem::take(&mut chunk_part.added_light_emitters);
 
-                let Some(mut area) = Area::new(&mut self.world.chunk_manager.chunk_map, changed_block_position.chunk.xz()) else { continue; };
-                area.update_sky_light_at(changed_block_position.local().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0), &mut afflicted_chunk_parts);
-                area.update_block_light_at(changed_block_position.local().map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0), &mut afflicted_chunk_parts);
+                let Some(mut chunks3x3) = Chunks3x3::new(&mut self.world.chunk_manager.chunk_map, changed_block_position.chunk.xz()) else { continue; };
+                let now = std::time::Instant::now();
+                chunks3x3.remove_block_light_at(inner_chunk_position);
+                let removal_time = now.elapsed();
+                let now = std::time::Instant::now();
+                chunks3x3.propagate_block_light_at(inner_chunk_position);
+                let propagation_time = now.elapsed();
+                let now = std::time::Instant::now();
+                chunks3x3.update_sky_light_level_at(inner_chunk_position);
+                let sky_light_update_time = now.elapsed();
+                println!("propagation_time: {:?}\nremoval_time: {:?}\nsky_light_update_time: {:?}\n=====\n", propagation_time, removal_time, sky_light_update_time);
                 
-                while let Some(light_local_position) = removed_light_emitters.pop() {
-                    let area_position = light_local_position.map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0);
-                    area.remove_block_light_at(area_position, &mut afflicted_chunk_parts);
-                }
-
-                while let Some(light_local_position) = added_light_emitters.pop() {
-                    let area_position = light_local_position.map(|f| f as i32) + Vector3::new(0, changed_block_position.chunk.y * CHUNK_SIZE_I32, 0);
-                    area.add_block_light_at(area_position, &mut afflicted_chunk_parts);
-                }
-
-                for chunk in area.chunks {
-                    self.world.chunk_manager.chunk_map.insert_arc(chunk.position, chunk);
-                }
-
-                for (chunk_position, chunk_part_index) in afflicted_chunk_parts {
-                    let Some(mesh) = self.world.chunk_manager.chunk_mesh_map.get_mut(chunk_position) else { continue; };
-                    mesh.parts_need_meshing[chunk_part_index] = true;
+                for chunk in chunks3x3.chunks {
+                    self.world.chunk_manager.chunk_map.insert(chunk.position, chunk);
                 }
             }
         });
@@ -70,8 +65,9 @@ impl Layer for GameLogicLayer {
     }
 
     fn on_render(&mut self, events: &mut Events, game: &mut Game) {
-        self.world.player.update();
-        let debug_gui = DebugGui::new(&self.world, game.last_render_instant.elapsed());
+        let dt = game.last_render_instant.elapsed();
+        self.world.player.update(dt.as_secs_f32());
+        let debug_gui = DebugGui::new(&self.world, dt);
         debug_gui.show(game.egui_winit_state.egui_ctx());
         self.world.chunk_renderer.view_projection.update_from_matrix(self.world.player.build_view_projection_matrix(game.aspect_ratio));
         self.world.chunk_renderer.render(&game.device, &game.queue, &mut self.world.chunk_manager, &mut game.render_thread);

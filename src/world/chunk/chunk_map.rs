@@ -88,18 +88,6 @@ impl ChunkMap {
     }
 
     #[inline]
-    pub fn get_light_level_global(&self, position: GlobalVecU) -> Option<&LightLevel> {
-        let chunk_part = self.get_chunk_part(position.chunk)?;
-        Some(&chunk_part.light_level_layers[position.local()])
-    }
-
-    #[inline]
-    pub fn set_light_level_global(&mut self, position: GlobalVecU, light_level: LightLevel) {
-        let Some(chunk_part) = self.get_mut_chunk_part(position.chunk) else { return; };
-        chunk_part.light_level_layers.set_light_level(position.local(), light_level);
-    }
-
-    #[inline]
     pub fn get_block_global(&self, position: GlobalVecU) -> Option<&Block> {
         let chunk = self.get_chunk(position.chunk.xz())?;
         chunk.parts[position.chunk.y as usize].get_block(position.local())
@@ -109,5 +97,19 @@ impl ChunkMap {
     pub fn set_block_global(&mut self, position: GlobalVecU, block: Block) {
         let Some(chunk) = self.get_mut_chunk(position.chunk.xz()) else { return; };
         chunk.parts[position.chunk.y as usize].set_block(position.local(), block);
+    }
+
+    #[inline]
+    pub fn get_light_level(&self, position: GlobalVecU) -> Option<LightLevel> {
+        if !position.in_bounds() { return None; }
+        let chunk = self.get_chunk(position.chunk.xz())?;
+        chunk.parts[position.chunk.y as usize].get_light_level(position.local())
+    }
+
+    #[inline]
+    pub fn set_light_level(&mut self, position: GlobalVecU, light_level: LightLevel) {
+        if !position.in_bounds() { return; }
+        let Some(chunk) = self.get_mut_chunk(position.chunk.xz()) else { return; };
+        chunk.parts[position.chunk.y as usize].set_light_level(position.local(), light_level);
     }
 }

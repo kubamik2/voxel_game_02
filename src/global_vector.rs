@@ -1,7 +1,7 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use cgmath::{num_traits::Euclid, InnerSpace, MetricSpace, Vector3};
-use crate::world::chunk::chunk_part::{CHUNK_SIZE_F32, CHUNK_SIZE_F64, CHUNK_SIZE_I32, INVERSE_CHUNK_SIZE};
+use crate::{chunk_position::ChunkPosition, world::chunk::chunk_part::{CHUNK_SIZE_F32, CHUNK_SIZE_F64, CHUNK_SIZE_I32, INVERSE_CHUNK_SIZE}};
 
 #[derive(Debug, Clone, Copy)]
 pub struct GlobalVecF {
@@ -372,7 +372,7 @@ impl Iterator for InterpolateVoxelEdgesIter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GlobalVecU {
     local: Vector3<i32>,
     pub chunk: Vector3<i32>,
@@ -380,8 +380,8 @@ pub struct GlobalVecU {
 
 impl GlobalVecU {
     #[inline]
-    pub fn local(&self) -> Vector3<usize> {
-        self.local.map(|f| f as usize)
+    pub fn local(&self) -> Vector3<u32> {
+        self.local.map(|f| f as u32)
     }
 
     #[inline]
@@ -396,9 +396,9 @@ impl GlobalVecU {
             z: rem_z,
         };
 
-        self.chunk.x += div_x as i32;
-        self.chunk.y += div_y as i32;
-        self.chunk.z += div_z as i32;
+        self.chunk.x += div_x;
+        self.chunk.y += div_y;
+        self.chunk.z += div_z;
     }
 
     #[inline]
@@ -497,6 +497,16 @@ impl Sub<Vector3<f32>> for GlobalVecU {
     fn sub(self, rhs: Vector3<f32>) -> Self::Output {
         let mut out: GlobalVecF = self.into();
         out -= rhs;
+        out
+    }
+}
+
+impl From<Vector3<i32>> for GlobalVecU {
+    #[inline]
+    fn from(value: Vector3<i32>) -> Self {
+        let mut out = Self { chunk: Vector3::new(0, 0, 0), local: Vector3::new(0, 0, 0) };
+        out += value;
+
         out
     }
 }

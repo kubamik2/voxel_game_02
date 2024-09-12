@@ -1,4 +1,4 @@
-#![feature(variant_count, float_next_up_down, downcast_unchecked)]
+#![feature(variant_count, float_next_up_down, downcast_unchecked, new_zeroed_alloc, portable_simd)]
 use block::{asset_loader::{BlockList, BlockMap}, model::{block_model_variant::BlockModelVariants, QuadRaw}, Block};
 use cgmath::Vector3;
 use hashbrown::HashMap;
@@ -24,6 +24,7 @@ mod typemap;
 mod keybinds;
 mod utils;
 mod shader;
+mod chunk_position;
 
 lazy_static::lazy_static! {
     pub static ref BASE_MODELS: block::asset_loader::BaseCuboidBlockModels = block::asset_loader::load_models("./assets/models").unwrap();

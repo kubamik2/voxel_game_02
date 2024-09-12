@@ -3,9 +3,9 @@ use std::sync::{mpsc::{Receiver, Sender}, Arc, Mutex};
 use cgmath::{Vector2, Vector3};
 use hashbrown::HashSet;
 
-use crate::{block::Block, thread_work_dispatcher::ThreadWorkDispatcher, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP, STRUCTURES};
+use crate::{block::Block, chunk_position::ChunkPosition, thread_work_dispatcher::ThreadWorkDispatcher, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP, STRUCTURES};
 
-use super::{chunks3x3::Chunks3x3, chunk_map::ChunkMap, chunk_part::CHUNK_SIZE, Chunk};
+use super::{chunk_map::ChunkMap, chunk_part::{chunk_part_position::ChunkPartPosition, CHUNK_SIZE, CHUNK_SIZE_U32}, chunks3x3::Chunks3x3, Chunk};
 
 lazy_static::lazy_static! {
     static ref DBG: Arc<Mutex<(usize, std::time::Duration, std::time::Duration, std::time::Duration)>> = Arc::new(Mutex::new((0, std::time::Duration::ZERO, std::time::Duration::ZERO, std::time::Duration::MAX)));
@@ -98,18 +98,19 @@ impl ChunkGenerator {
             .with_seed(1)
             .generate().0;
             let stone_id = part.block_pallet.insert_block(BLOCK_MAP.get("stone").unwrap().clone().into());
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
-                    for x in 0..CHUNK_SIZE {
-                        let a = (y + chunk_part_index * CHUNK_SIZE).saturating_sub(200) as f32 / CHUNK_HEIGHT as f32;
-                        let density = fbm[x + z * CHUNK_SIZE + y * CHUNK_SIZE * CHUNK_SIZE] - a.sqrt();
+            for y in 0..CHUNK_SIZE_U32 {
+                for z in 0..CHUNK_SIZE_U32 {
+                    for x in 0..CHUNK_SIZE_U32 {
+                        let a = (y as usize + chunk_part_index * CHUNK_SIZE).saturating_sub(200) as f32 / CHUNK_HEIGHT as f32;
+                        let density = fbm[x as usize + z as usize * CHUNK_SIZE + y as usize * CHUNK_SIZE * CHUNK_SIZE] - a.sqrt();
                         if density > 0.0 {
-                            part.set_block_pallet_id(Vector3 { x, y, z }, stone_id);
-                            let highest_block = &mut chunk.highest_blocks[x + z * CHUNK_SIZE];
-                            if chunk_part_index as u8 > highest_block.0 {
-                                *highest_block = (chunk_part_index as u8, y as u8);
-                            } else if chunk_part_index as u8 == highest_block.0 && y as u8 > highest_block.1 {
-                                *highest_block = (chunk_part_index as u8, y as u8);
+                            let position = unsafe { ChunkPartPosition::new_unchecked(Vector3 { x, y, z }) };
+                            part.set_block_pallet_id(position, stone_id);
+                            let highest_block_position = &mut chunk.highest_blocks[Vector2::new(x as usize, z as usize)];
+                            if (chunk_part_index as u8 > highest_block_position.chunk_part_index)
+                            || (chunk_part_index as u8 == highest_block_position.chunk_part_index && y as u8 > highest_block_position.y) {
+                                highest_block_position.chunk_part_index = chunk_part_index as u8;
+                                highest_block_position.y = y as u8;
                             }
                         }
                     }
@@ -126,18 +127,20 @@ impl ChunkGenerator {
         for y in 0..CHUNK_HEIGHT {
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    let position = Vector3::new(x, y, z);
-                    if let Some(block) = center_chunk.get_block_chunk_local(position) {
-                        if block.name() == "air" { continue; }
-                    }
+                    let position = ChunkPosition::try_from(Vector3::new(x as u32, y as u32, z as u32)).unwrap();
+                    if center_chunk.get_block(position).name() == "air" { continue; }
 
                     let air_on_top = {
-                        let Some(block) = center_chunk.get_block_chunk_local(position + Vector3::unit_y()) else { continue; };
-                        block.name() == "air"
+                        if let Some(position) = position.checked_add_u32(Vector3::unit_y()) {
+                            let block = center_chunk.get_block(position);
+                            block.name() == "air"
+                        } else {
+                            false
+                        }
                     };
 
                     if air_on_top {
-                        center_chunk.set_block_chunk_local(position, grass.clone());
+                        center_chunk.set_block(position, grass.clone());
                     }
                 }
             }
@@ -163,8 +166,8 @@ impl ChunkGenerator {
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 if fbm[x + z * CHUNK_SIZE] > 0.06 {
-                    let (highest_block_chunk_part_index, highest_chunk_part_y) = chunks3x3.center_chunk().highest_blocks[x + z * CHUNK_SIZE];
-                    let highest_y = (highest_chunk_part_y as usize + highest_block_chunk_part_index as usize * CHUNK_SIZE) as i32;
+                    let highest_block_position = chunks3x3.center_chunk().highest_blocks[Vector2::new(x, z)];
+                    let highest_y = (highest_block_position.y as usize + highest_block_position.chunk_part_index as usize * CHUNK_SIZE) as i32;
                     let tree = STRUCTURES.get("tree").unwrap();
 
                     chunks3x3.insert_structure(tree, Vector3::new(x as i32, highest_y + 1, z as i32));

@@ -1,11 +1,11 @@
 use std::{collections::VecDeque, fmt::Debug, mem::MaybeUninit, sync::Arc};
 
-use cgmath::{Vector2, Vector3};
+use cgmath::{num_traits::Euclid, Vector2, Vector3};
 use hashbrown::{HashMap, HashSet};
 
-use crate::{block::{light::{LightLevel, LIGHT_LEVEL_MAX_VALUE}, Block, FaceDirection}, world::{chunk::chunk_part::CHUNK_SIZE_I32, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_LIST};
+use crate::{block::{light::{LightLevel, LIGHT_LEVEL_MAX_VALUE}, Block, FaceDirection}, chunk_position::ChunkPosition, global_vector::GlobalVecU, world::{chunk::chunk_part::CHUNK_SIZE_I32, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_LIST};
 
-use super::{chunk_map::ChunkMap, chunk_part::{ChunkPart, CHUNK_SIZE}, Chunk};
+use super::{chunk_map::ChunkMap, chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32}, Chunk};
 
 pub struct Chunks3x3 {
     pub chunks: [Chunk; 9]
@@ -19,15 +19,15 @@ impl Debug for Chunks3x3 {
     }
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy)]
 struct LightNode {
     x: i8,
-    y: i16,
     z: i8,
+    y: i16,
 }
 
 impl LightNode {
-    pub fn new(position: Vector3<i32>) -> Self {
+    pub const fn new(position: Vector3<i32>) -> Self {
         Self {
             x: position.x as i8,
             y: position.y as i16,
@@ -38,45 +38,10 @@ impl LightNode {
 
 impl Chunks3x3 {
     #[inline]
-    fn chunk_index(offset: Vector2<i32>) -> Option<usize> {
+    const fn chunk_index(offset: Vector2<i32>) -> Option<usize> {
         let index = offset.x + offset.y * 3 + 4;
         if index < 0 || index > 8 { return None; }
         Some(index as usize)
-    }
-
-    #[inline]
-    fn get_chunk_part_and_local_position(&self, position: Vector3<i32>) -> Option<(&ChunkPart, Vector3<usize>)> {
-        if position.y < 0 || position.y >= CHUNK_HEIGHT as i32 { return None; }
-        let chunk_part_index = position.y.div_euclid(CHUNK_SIZE_I32);
-
-        let chunk_offset = position.xz().map(|f| f.div_euclid(CHUNK_SIZE as i32));
-        let chunk = self.get_chunk(chunk_offset)?;
-
-        let local_position = position.map(|f| f.rem_euclid(CHUNK_SIZE as i32) as usize);
-        let chunk_part = &chunk.parts[chunk_part_index as usize];
-
-        Some((chunk_part, local_position))
-    }
-
-    #[inline]
-    fn get_chunk_offset_and_chunk_part_index(&self, position: Vector3<i32>) -> Option<(Vector2<i32>, usize)> {
-        if position.y < 0 || position.y >= CHUNK_HEIGHT as i32 { return None; }
-        let chunk_offset = position.xz().map(|f| f.div_euclid(CHUNK_SIZE_I32));
-        Some((chunk_offset, position.y as usize / CHUNK_SIZE))
-    }
-
-    #[inline]
-    fn get_chunk_part_mut_and_local_position(&mut self, position: Vector3<i32>) -> Option<(&mut ChunkPart, Vector3<usize>)> {
-        if position.y < 0 || position.y >= CHUNK_HEIGHT as i32 { return None; }
-        let chunk_part_index = position.y.div_euclid(CHUNK_SIZE_I32);
-
-        let chunk_offset = position.xz().map(|f| f.div_euclid(CHUNK_SIZE as i32));
-        let chunk = self.get_chunk_mut(chunk_offset)?;
-
-        let local_position = position.map(|f| f.rem_euclid(CHUNK_SIZE as i32) as usize);
-        let chunk_part = &mut chunk.parts[chunk_part_index as usize];
-
-        Some((chunk_part, local_position))
     }
 
     #[inline]
@@ -98,39 +63,79 @@ impl Chunks3x3 {
     }
 
     #[inline]
+    fn get_chunk_and_chunk_position(&self, position: Vector3<i32>) -> Option<(&Chunk, ChunkPosition)> {
+        if position.y < 0 || position.y > CHUNK_HEIGHT as i32 { return None; }
+
+        let chunk_offset = Vector2::new(
+            (position.x & !(0b11111_i32)) >> 5,
+            (position.z & !(0b11111_i32)) >> 5,
+        );
+        let chunk = self.get_chunk(chunk_offset)?;
+        let chunk_part_index = ((position.y & !(0b11111_i32)) >> 5) as u32;
+
+        let chunk_part_position = Vector3::new(
+            (position.x & 0b11111) as u32,
+            (position.y & 0b11111) as u32,
+            (position.z & 0b11111) as u32,
+        );
+
+        Some((chunk, unsafe { ChunkPosition::new_unchecked(chunk_part_position, chunk_part_index as usize) }))
+    }
+
+    #[inline]
+    fn get_chunk_mut_and_chunk_position(&mut self, position: Vector3<i32>) -> Option<(&mut Chunk, ChunkPosition)> {
+        if position.y < 0 || position.y > CHUNK_HEIGHT as i32 { return None; }
+
+        let chunk_offset = Vector2::new(
+            (position.x & !(0b11111_i32)) >> 5,
+            (position.z & !(0b11111_i32)) >> 5,
+        );
+        let chunk = self.get_chunk_mut(chunk_offset)?;
+        let chunk_part_index = ((position.y & !(0b11111_i32)) >> 5) as u32;
+
+        let chunk_part_position = Vector3::new(
+            (position.x & 0b11111) as u32,
+            (position.y & 0b11111) as u32,
+            (position.z & 0b11111) as u32,
+        );
+
+        Some((chunk, unsafe { ChunkPosition::new_unchecked(chunk_part_position, chunk_part_index as usize) }))
+    }
+
+    #[inline]
     pub fn get_block(&self, position: Vector3<i32>) -> Option<&Block> {
-        let (chunk_part, local_position) = self.get_chunk_part_and_local_position(position)?;
-        chunk_part.get_block(local_position)
+        let (chunk, local_chunk_position) = self.get_chunk_and_chunk_position(position)?;
+        Some(chunk.get_block(local_chunk_position))
     }
 
     #[inline]
     pub fn set_block(&mut self, position: Vector3<i32>, block: Block) {
-        let Some((chunk_part, local_position)) = self.get_chunk_part_mut_and_local_position(position) else { return; };
-        chunk_part.set_block(local_position, block);
+        let Some((chunk, local_chunk_position)) = self.get_chunk_mut_and_chunk_position(position) else { return; };
+        chunk.set_block(local_chunk_position, block);
     }
-    
+
     #[inline]
     pub fn get_sky_light_level(&self, position: Vector3<i32>) -> Option<u8> {
-        let (chunk_part, local_position) = self.get_chunk_part_and_local_position(position)?;
-        Some(chunk_part.get_sky_light_level(local_position).unwrap())
+        let (chunk, local_chunk_position) = self.get_chunk_and_chunk_position(position)?;
+        Some(chunk.get_sky_light_level(local_chunk_position))
     }
 
     #[inline]
     pub fn get_block_light_level(&self, position: Vector3<i32>) -> Option<u8> {
-        let (chunk_part, local_position) = self.get_chunk_part_and_local_position(position)?;
-        Some(chunk_part.get_block_light_level(local_position).unwrap())
+        let (chunk, local_position) = self.get_chunk_and_chunk_position(position)?;
+        Some(chunk.get_block_light_level(local_position))
     }
     
     #[inline]
     pub fn set_sky_light_level(&mut self, position: Vector3<i32>, level: u8) {
-        let Some((chunk_part, local_position)) = self.get_chunk_part_mut_and_local_position(position) else { return; };
-        chunk_part.set_sky_light_level(local_position, level);
+        let Some((chunk, local_position)) = self.get_chunk_mut_and_chunk_position(position) else { return; };
+        chunk.set_sky_light_level(local_position, level);
     }
 
     #[inline]
     pub fn set_block_light_level(&mut self, position: Vector3<i32>, level: u8) {
-        let Some((chunk_part, local_position)) = self.get_chunk_part_mut_and_local_position(position) else { return; };
-        chunk_part.set_block_light_level(local_position, level);
+        let Some((chunk, local_position)) = self.get_chunk_mut_and_chunk_position(position) else { return; };
+        chunk.set_block_light_level(local_position, level);
     }
 
     pub fn insert_structure(&mut self, structure: &Structure, origin_point: Vector3<i32>) {
@@ -155,9 +160,21 @@ impl Chunks3x3 {
             }
         }
 
-        let chunks = unsafe { std::mem::transmute::<_, [Chunk; 9]>(chunks) };
+        let mut chunks = unsafe { std::mem::transmute::<_, [Chunk; 9]>(chunks) };
+        for chunk in chunks.iter_mut() {
+            for part in chunk.parts.iter_mut() {
+                part.light_level_layers.uncompress();
+            }
+        }
 
         Some(Self { chunks })
+    }
+
+    pub fn return_to_chunk_map(self, chunk_map: &mut ChunkMap) {
+        for mut chunk in self.chunks {
+            chunk.maintain_parts();
+            chunk_map.insert(chunk.position, chunk);
+        }
     }
 
     #[inline]
@@ -167,8 +184,6 @@ impl Chunks3x3 {
     
     #[inline]
     pub fn center_chunk_mut(&mut self) -> &mut Chunk {
-        // assert!(Arc::strong_count(&self.chunks[4]) == 1);
-        // Arc::make_mut(&mut self.chunks[4])
         &mut self.chunks[4]
     }
 
@@ -176,9 +191,9 @@ impl Chunks3x3 {
     fn step_block_light_propagation_towards(&mut self, position: Vector3<i32>, direction: Vector3<i32>, light_level: u8, propagation_queue: &mut VecDeque<LightNode>) {
         let neighbor_position = position + direction;
         let Some(neighbor_block) = self.get_block(neighbor_position) else { return; };
-        let Some(neighbor_block_light_level) = self.get_block_light_level(neighbor_position) else { return; };
+        let neighbor_block_light_level = unsafe { self.get_block_light_level(neighbor_position).unwrap_unchecked() };
         
-        let attenuation = neighbor_block.properties().light_attenuation.from_direction(direction).unwrap();
+        let attenuation = unsafe { neighbor_block.properties().light_attenuation.from_direction(direction).unwrap_unchecked() };
         let new_neighbor_block_light_level = light_level.saturating_sub(attenuation + 1);
 
         if neighbor_block_light_level >= new_neighbor_block_light_level { return; }
@@ -359,34 +374,43 @@ impl Chunks3x3 {
     #[inline]
     fn step_sky_light_propagation_towards(&mut self, position: Vector3<i32>, direction: Vector3<i32>, light_level: u8, propagation_queue: &mut VecDeque<LightNode>) {
         let neighbor_position = position + direction;
-        let Some(neighbor_light_level) = self.get_sky_light_level(neighbor_position) else { return; };
-        let Some(neighbor_block) = self.get_block(neighbor_position) else { return; };
+        let Some((chunk, chunk_position)) = self.get_chunk_mut_and_chunk_position(neighbor_position) else { return; };
 
-        let attenuation = neighbor_block.properties().light_attenuation.from_direction(direction).unwrap();
+        let neighbor_light_level = chunk.get_sky_light_level(chunk_position);
+        let neighbor_block = chunk.get_block(chunk_position);
+
+        let attenuation = unsafe { neighbor_block.properties().light_attenuation.from_direction(direction).unwrap_unchecked() };
         let new_neighbor_sky_light_level = light_level.saturating_sub(attenuation + 1);
 
         if neighbor_light_level >= new_neighbor_sky_light_level { return; }
 
-        self.set_sky_light_level(neighbor_position, new_neighbor_sky_light_level);
+        chunk.set_sky_light_level(chunk_position, new_neighbor_sky_light_level);
+
+        if new_neighbor_sky_light_level == 1 { return; }
+
         propagation_queue.push_back(LightNode::new(neighbor_position));
     }
 
     #[inline]
     fn step_sky_light_propagation_downwards(&mut self, position: Vector3<i32>, light_level: u8, propagation_queue: &mut VecDeque<LightNode>) {
         let neighbor_position = position - Vector3::unit_y();
-        let Some(neighbor_light_level) = self.get_sky_light_level(neighbor_position) else { return; };
-        let Some(neighbor_block) = self.get_block(neighbor_position) else { return; };
+        let Some((chunk, chunk_position)) = self.get_chunk_mut_and_chunk_position(neighbor_position) else { return; };
+
+        let neighbor_light_level = chunk.get_sky_light_level(chunk_position);
+        let neighbor_block = chunk.get_block(chunk_position);
 
         let attenuation = neighbor_block.properties().light_attenuation.from_direction(Vector3::unit_y()).unwrap();
         let new_neighbor_sky_light_level = light_level.saturating_sub(attenuation + (light_level != LIGHT_LEVEL_MAX_VALUE) as u8);
 
         if neighbor_light_level >= new_neighbor_sky_light_level { return; }
 
-        self.set_sky_light_level(neighbor_position, new_neighbor_sky_light_level);
+        chunk.set_sky_light_level(chunk_position, new_neighbor_sky_light_level);
+
+        if new_neighbor_sky_light_level == 1 { return; }
+
         propagation_queue.push_back(LightNode::new(neighbor_position));
     }
 
-    #[inline]
     pub fn update_sky_light_level_at(&mut self, position: Vector3<i32>) {
         let mut propagation_queue = VecDeque::new();
         let mut removal_queue = VecDeque::new();
@@ -398,9 +422,11 @@ impl Chunks3x3 {
         self.step_sky_light_removal_towards(position, Vector3::new(0, 1, 0), &mut removal_queue, &mut propagation_queue);
         self.step_sky_light_removal_towards(position, Vector3::new(0, -1, 0), &mut removal_queue, &mut propagation_queue);
 
+        let mut rems = 0;
         let now = std::time::Instant::now();
         while let Some(light_node) = removal_queue.pop_front() {
             let position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
+            rems += 1;
             self.step_sky_light_removal_towards(position, Vector3::new(1, 0, 0), &mut removal_queue, &mut propagation_queue);
             self.step_sky_light_removal_towards(position, Vector3::new(-1, 0, 0), &mut removal_queue, &mut propagation_queue);
             self.step_sky_light_removal_towards(position, Vector3::new(0, 0, 1), &mut removal_queue, &mut propagation_queue);
@@ -411,30 +437,22 @@ impl Chunks3x3 {
         dbg!(now.elapsed());
 
         let now = std::time::Instant::now();
-        let mut visited_nodes = HashMap::new();
+        let mut props = 0;
         while let Some(light_node) = propagation_queue.pop_front() {
             let position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
-            let Some(light_level) = self.get_sky_light_level(position) else { continue; };
+            let light_level = unsafe { self.get_sky_light_level(position).unwrap_unchecked() };
 
-            match visited_nodes.entry(light_node) {
-                hashbrown::hash_map::Entry::Occupied(mut occupied) => {
-                    let level = *occupied.get();
-                    if level < light_level {
-                        occupied.insert(light_level);
-                    } else { continue; }
-                },
-                hashbrown::hash_map::Entry::Vacant(vacant) => {
-                    vacant.insert(light_level);
-                }
-            }
+            props += 1;
+            self.step_sky_light_propagation_downwards(position, light_level, &mut propagation_queue);
             self.step_sky_light_propagation_towards(position, Vector3::new(1, 0, 0), light_level, &mut propagation_queue);
             self.step_sky_light_propagation_towards(position, Vector3::new(-1, 0, 0), light_level, &mut propagation_queue);
             self.step_sky_light_propagation_towards(position, Vector3::new(0, 0, 1), light_level, &mut propagation_queue);
             self.step_sky_light_propagation_towards(position, Vector3::new(0, 0, -1), light_level, &mut propagation_queue);
             self.step_sky_light_propagation_towards(position, Vector3::new(0, 1, 0), light_level, &mut propagation_queue);
-            self.step_sky_light_propagation_downwards(position, light_level, &mut propagation_queue);
         }
         dbg!(now.elapsed());
+        dbg!(props);
+        dbg!(rems);
     }
 
     pub fn propagate_sky_light(&mut self) {
@@ -469,7 +487,8 @@ impl Chunks3x3 {
                 let local_y = y % CHUNK_SIZE; // can non euclid rem y > 0
                 for z in 0..CHUNK_SIZE {
                     for x in 0..CHUNK_SIZE {
-                        chunk_part.set_sky_light_level(Vector3::new(x, local_y, z), LIGHT_LEVEL_MAX_VALUE);
+                        let position = unsafe { ChunkPartPosition::new_unchecked(Vector3::new(x as u32, local_y as u32, z as u32)) };
+                        chunk_part.set_sky_light_level(position, LIGHT_LEVEL_MAX_VALUE);
                     }
                 }
             }

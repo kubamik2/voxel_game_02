@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 #[derive(serde::Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct BlockState(HashMap<String, Value>);

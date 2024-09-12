@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use block_state::BlockState;
-use cgmath::Vector3;
+use cgmath::{num_traits::Signed, Vector3, Zero};
 use light::LIGHT_LEVEL_MAX_VALUE;
 use serde::Deserialize;
 
@@ -54,11 +54,6 @@ impl Block {
 
     #[inline]
     pub fn properties(&self) -> Properties {
-        // let mut properties = BLOCK_LIST.get(self.id).unwrap().base_properties;
-        // for variant in BLOCK_MODEL_VARIANTS.get_model_variants(self).unwrap() {
-        //     properties.join_optional(variant.properties);
-        // }
-        // properties
         self.properties
     }
 }
@@ -119,11 +114,11 @@ impl Into<Block> for BlockInformation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LightAttenuation([u8; FACE_DIRECTIONS_NUM]);
+pub struct LightAttenuation([u8; FACE_DIRECTIONS_NUM / 2]);
 
 impl LightAttenuation {
     pub fn opaque() -> Self {
-        Self(std::array::from_fn(|_| LIGHT_LEVEL_MAX_VALUE))
+        Self(std::array::from_fn(|_| u8::MAX))
     }
 
     pub fn is_opaque(&self) -> bool {
@@ -134,15 +129,16 @@ impl LightAttenuation {
         self.0.iter().all(|f| *f == 0)
     }
 
+    // TODO change name
     #[inline]
-    pub fn from_direction(&self, direction: Vector3<i32>) -> Option<u8> {
+    pub const fn from_direction(&self, direction: Vector3<i32>) -> Option<u8> {
         match direction {
-            Vector3 { x: 1, y: 0, z: 0 } => Some(self.0[0]),
-            Vector3 { x: -1, y: 0, z: 0 } => Some(self.0[1]),
-            Vector3 { x: 0, y: 0, z: 1 } => Some(self.0[2]),
-            Vector3 { x: 0, y: 0, z: -1 } => Some(self.0[3]),
-            Vector3 { x: 0, y: 1, z: 0 } => Some(self.0[4]),
-            Vector3 { x: 0, y: -1, z: 0 } => Some(self.0[5]),
+            Vector3 { x: 1, y: 0, z: 0 } => Some(self.0[0] & LIGHT_LEVEL_MAX_VALUE),
+            Vector3 { x: -1, y: 0, z: 0 } => Some(self.0[0] >> 4),
+            Vector3 { x: 0, y: 0, z: 1 } => Some(self.0[1] & LIGHT_LEVEL_MAX_VALUE),
+            Vector3 { x: 0, y: 0, z: -1 } => Some(self.0[1] >> 4),
+            Vector3 { x: 0, y: 1, z: 0 } => Some(self.0[2] & LIGHT_LEVEL_MAX_VALUE),
+            Vector3 { x: 0, y: -1, z: 0 } => Some(self.0[2] >> 4),
             _ => None
         }
     }
@@ -173,7 +169,14 @@ pub struct LightAttenuationDeserialize {
 
 impl Into<LightAttenuation> for LightAttenuationDeserialize {
     fn into(self) -> LightAttenuation {
-        LightAttenuation([self.px, self.nx, self.pz, self.nz, self.py, self.ny])
+        assert!(self.px <= LIGHT_LEVEL_MAX_VALUE);
+        assert!(self.nx <= LIGHT_LEVEL_MAX_VALUE);
+        assert!(self.pz <= LIGHT_LEVEL_MAX_VALUE);
+        assert!(self.nz <= LIGHT_LEVEL_MAX_VALUE);
+        assert!(self.py <= LIGHT_LEVEL_MAX_VALUE);
+        assert!(self.ny <= LIGHT_LEVEL_MAX_VALUE);
+        
+        LightAttenuation([self.px | (self.nx << 4), self.pz | (self.nz << 4), self.py | (self.ny << 4)])
     }
 }
 
@@ -205,7 +208,6 @@ pub struct Properties {
     #[serde(default = "u8_0")]
     pub emitted_light: u8,
 }
-
 
 impl Properties {
     pub fn join_optional(&mut self, optional: PropertiesOptional) {

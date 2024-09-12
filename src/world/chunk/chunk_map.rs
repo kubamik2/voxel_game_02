@@ -3,7 +3,7 @@ use std::sync::Arc;
 use cgmath::{Vector2, Vector3};
 use hashbrown::{hash_map::{Keys, Values}, HashMap};
 
-use crate::{block::{light::LightLevel, Block}, global_vector::GlobalVecU, world::PARTS_PER_CHUNK};
+use crate::{block::{light::LightLevel, Block}, chunk_position::ChunkPosition, global_vector::GlobalVecU, world::PARTS_PER_CHUNK};
 
 use super::{chunk_generator::GenerationStage, chunk_part::ChunkPart, Chunk};
 
@@ -88,28 +88,30 @@ impl ChunkMap {
     }
 
     #[inline]
-    pub fn get_block_global(&self, position: GlobalVecU) -> Option<&Block> {
+    pub fn get_block(&self, position: GlobalVecU) -> Option<&Block> {
         let chunk = self.get_chunk(position.chunk.xz())?;
-        chunk.parts[position.chunk.y as usize].get_block(position.local())
+        let position = ChunkPosition::try_from(position).ok()?;
+        Some(chunk.get_block(position))
     }
 
     #[inline]
-    pub fn set_block_global(&mut self, position: GlobalVecU, block: Block) {
+    pub fn set_block(&mut self, position: GlobalVecU, block: Block) {
         let Some(chunk) = self.get_mut_chunk(position.chunk.xz()) else { return; };
-        chunk.parts[position.chunk.y as usize].set_block(position.local(), block);
+        let Ok(position) = ChunkPosition::try_from(position) else { return; };
+        chunk.set_block(position, block);
     }
 
     #[inline]
     pub fn get_light_level(&self, position: GlobalVecU) -> Option<LightLevel> {
-        if !position.in_bounds() { return None; }
         let chunk = self.get_chunk(position.chunk.xz())?;
-        chunk.parts[position.chunk.y as usize].get_light_level(position.local())
+        let position = ChunkPosition::try_from(position).ok()?;
+        Some(chunk.get_light_level(position))
     }
 
     #[inline]
     pub fn set_light_level(&mut self, position: GlobalVecU, light_level: LightLevel) {
-        if !position.in_bounds() { return; }
         let Some(chunk) = self.get_mut_chunk(position.chunk.xz()) else { return; };
-        chunk.parts[position.chunk.y as usize].set_light_level(position.local(), light_level);
+        let Ok(position) = ChunkPosition::try_from(position) else { return; };
+        chunk.set_light_level(position, light_level);
     }
 }

@@ -102,12 +102,12 @@ impl BlockPallet {
 
     #[inline]
     pub fn get(&self, block_pallet_id: &BlockPalletItemId) -> Option<&BlockPalletItem> {
-        self.items.get(*block_pallet_id as usize).map(|f| f.as_ref()).flatten()
+        self.items.get(*block_pallet_id as usize).and_then(|f| f.as_ref())
     }
 
     #[inline]
     pub fn get_mut(&mut self, id: &BlockPalletItemId) -> Option<&mut BlockPalletItem> {
-        self.items.get_mut(*id as usize).map(|f| f.as_mut()).flatten()
+        self.items.get_mut(*id as usize).and_then(|f| f.as_mut())
     }
 
     #[inline]

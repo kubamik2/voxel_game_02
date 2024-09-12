@@ -4,7 +4,7 @@ use cgmath::Vector2;
 
 use crate::{block::{light::LightLevel, model::{Face, FacePacked}, FaceDirection, FACE_DIRECTIONS_NUM}, BLOCK_MODEL_VARIANTS};
 
-use super::{expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE};
+use super::{expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32};
 
 
 #[derive(Debug)]
@@ -49,9 +49,9 @@ impl ChunkPartMesher {
                 block_properties_cache[block_pallet_id as usize] = Some(properties);
             }
 
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
-                    for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE_U32 {
+                for z in 0..CHUNK_SIZE_U32 {
+                    for x in 0..CHUNK_SIZE_U32 {
                         let block_pallet_id = meshing_input.expanded_chunk_part.index_inner_block_pallet_id((x, y, z));
 
                         let block_models = block_models_cache[*block_pallet_id as usize].as_ref().unwrap();
@@ -69,7 +69,7 @@ impl ChunkPartMesher {
                                 let texture_indices = &texture_indices_per_face[face_num];
                                 let quad_culling = &quad_culling_per_face[face_num];
 
-                                let adjacent_block_position = ((x as i32 + 1 + normal.x) as usize, (y as i32 + 1 + normal.y) as usize, (z as i32 + 1 + normal.z) as usize);
+                                let adjacent_block_position = ((x as i32 + 1 + normal.x) as u32, (y as i32 + 1 + normal.y) as u32, (z as i32 + 1 + normal.z) as u32);
                                 let adjacent_block_pallet_id = meshing_input.expanded_chunk_part.index_block_pallet_id(adjacent_block_position);
                                 let adjacent_block_properties = block_properties_cache[*adjacent_block_pallet_id as usize].unwrap();
                                 let adjacent_block_light_level = *meshing_input.expanded_chunk_part.index_light_level(adjacent_block_position);

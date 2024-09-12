@@ -8,7 +8,7 @@ use crate::{block::{light::{LightLevel, LIGHT_LEVEL_MAX_VALUE}, Block, FaceDirec
 use super::{chunk_map::ChunkMap, chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32}, Chunk};
 
 pub struct Chunks3x3 {
-    pub chunks: [Chunk; 9]
+    pub chunks: Box<[Chunk; 9]>,
 }
 
 impl Debug for Chunks3x3 {
@@ -151,7 +151,7 @@ impl Chunks3x3 {
             }
         }
         
-        let mut chunks: [MaybeUninit<Chunk>; 9] = std::array::from_fn(|_| MaybeUninit::uninit());
+        let mut chunks: Box<[MaybeUninit<Chunk>; 9]> = Box::new(std::array::from_fn(|_| MaybeUninit::uninit()));
         let mut index = 0;
         for z in -1..=1 {
             for x in -1..=1 {
@@ -160,7 +160,7 @@ impl Chunks3x3 {
             }
         }
 
-        let mut chunks = unsafe { std::mem::transmute::<_, [Chunk; 9]>(chunks) };
+        let mut chunks = unsafe { std::mem::transmute::<_, Box<[Chunk; 9]>>(chunks) };
         for chunk in chunks.iter_mut() {
             for part in chunk.parts.iter_mut() {
                 part.light_level_layers.uncompress();
@@ -171,7 +171,7 @@ impl Chunks3x3 {
     }
 
     pub fn return_to_chunk_map(self, chunk_map: &mut ChunkMap) {
-        for mut chunk in self.chunks {
+        for mut chunk in self.chunks.into_iter() {
             chunk.maintain_parts();
             chunk_map.insert(chunk.position, chunk);
         }

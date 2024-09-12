@@ -5,7 +5,7 @@ pub mod quad_block_model;
 use block_model_variant::BlockModelVariantDeserialize;
 use cgmath::{Deg, Rotation, Vector2, Vector3, Zero};
 
-use super::{block_state::{BlockState, Value}, light::{LightLevel, LIGHT_LEVEL_BITS}, quad_buffer::QuadBuffer, AlphaMode, Block, FaceDirection, Properties, PropertiesOptional, FACE_DIRECTIONS_NUM};
+use super::{block_state::{BlockState, Value}, light::{LightLevel, LIGHT_LEVEL_BITS}, quad_buffer::QuadBuffer, AlphaMode, Block, FaceDirection, Properties, PropertiesDeserialize, PropertiesOptional, FACE_DIRECTIONS_NUM};
 
 
 #[derive(serde::Deserialize)]
@@ -14,7 +14,7 @@ pub struct BlockDeserialize {
     #[serde(default)]
     pub default_state: BlockState,
     #[serde(default)]
-    pub base_properties: Properties,
+    pub base_properties: PropertiesDeserialize,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, serde::Deserialize)]

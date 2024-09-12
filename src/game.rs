@@ -27,6 +27,7 @@ pub struct Game {
     pub egui_winit_state: egui_winit::State,
     pub egui_full_output: egui::FullOutput,
     pub last_render_instant: std::time::Instant,
+    pub last_update_time: std::time::Duration,
 }
 
 impl Game {
@@ -127,6 +128,7 @@ impl Game {
                 egui_winit_state,
                 egui_full_output: egui::FullOutput::default(),
                 last_render_instant: std::time::Instant::now(),
+                last_update_time: std::time::Duration::ZERO,
             }, 
             event_loop,
         ))

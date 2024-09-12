@@ -23,7 +23,7 @@ pub enum ChunkGeneratorOutput {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum GenerationStage {
     Empty,
     Shape,

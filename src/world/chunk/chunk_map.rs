@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use cgmath::{Vector2, Vector3};
-use hashbrown::{hash_map::{Keys, Values}, HashMap};
+use hashbrown::{hash_map::{Keys, Values, ValuesMut}, HashMap};
 
 use crate::{block::{light::LightLevel, Block}, chunk_position::ChunkPosition, global_vector::GlobalVecU, world::PARTS_PER_CHUNK};
 
 use super::{chunk_generator::GenerationStage, chunk_part::ChunkPart, Chunk};
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChunkMap {
     chunks: HashMap<Vector2<i32>, Arc<Chunk>>
 }
@@ -61,6 +62,11 @@ impl ChunkMap {
     #[inline]
     pub fn values(&self) -> Values<Vector2<i32>, Arc<Chunk>> {
         self.chunks.values()
+    }
+    
+    #[inline]
+    pub fn values_mut(&mut self) -> ValuesMut<Vector2<i32>, Arc<Chunk>> {
+        self.chunks.values_mut()
     }
 
     #[inline]

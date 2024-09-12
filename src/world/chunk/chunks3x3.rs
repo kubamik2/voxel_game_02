@@ -190,15 +190,16 @@ impl Chunks3x3 {
     #[inline]
     fn step_block_light_propagation_towards(&mut self, position: Vector3<i32>, direction: Vector3<i32>, light_level: u8, propagation_queue: &mut VecDeque<LightNode>) {
         let neighbor_position = position + direction;
-        let Some(neighbor_block) = self.get_block(neighbor_position) else { return; };
-        let neighbor_block_light_level = unsafe { self.get_block_light_level(neighbor_position).unwrap_unchecked() };
+        let Some((chunk, chunk_position)) = self.get_chunk_mut_and_chunk_position(neighbor_position) else { return; };
+        let neighbor_block = chunk.get_block(chunk_position);
+        let neighbor_block_light_level = chunk.get_block_light_level(chunk_position);
         
         let attenuation = unsafe { neighbor_block.properties().light_attenuation.from_direction(direction).unwrap_unchecked() };
         let new_neighbor_block_light_level = light_level.saturating_sub(attenuation + 1);
 
         if neighbor_block_light_level >= new_neighbor_block_light_level { return; }
 
-        self.set_block_light_level(neighbor_position, new_neighbor_block_light_level);
+        chunk.set_block_light_level(chunk_position, new_neighbor_block_light_level);
         propagation_queue.push_back(LightNode::new(neighbor_position));
     }
 
@@ -422,11 +423,8 @@ impl Chunks3x3 {
         self.step_sky_light_removal_towards(position, Vector3::new(0, 1, 0), &mut removal_queue, &mut propagation_queue);
         self.step_sky_light_removal_towards(position, Vector3::new(0, -1, 0), &mut removal_queue, &mut propagation_queue);
 
-        let mut rems = 0;
-        let now = std::time::Instant::now();
         while let Some(light_node) = removal_queue.pop_front() {
             let position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
-            rems += 1;
             self.step_sky_light_removal_towards(position, Vector3::new(1, 0, 0), &mut removal_queue, &mut propagation_queue);
             self.step_sky_light_removal_towards(position, Vector3::new(-1, 0, 0), &mut removal_queue, &mut propagation_queue);
             self.step_sky_light_removal_towards(position, Vector3::new(0, 0, 1), &mut removal_queue, &mut propagation_queue);
@@ -434,15 +432,11 @@ impl Chunks3x3 {
             self.step_sky_light_removal_towards(position, Vector3::new(0, 1, 0), &mut removal_queue, &mut propagation_queue);
             self.step_sky_light_removal_towards(position, Vector3::new(0, -1, 0), &mut removal_queue, &mut propagation_queue);
         }
-        dbg!(now.elapsed());
 
-        let now = std::time::Instant::now();
-        let mut props = 0;
         while let Some(light_node) = propagation_queue.pop_front() {
             let position = Vector3::new(light_node.x as i32, light_node.y as i32, light_node.z as i32);
             let light_level = unsafe { self.get_sky_light_level(position).unwrap_unchecked() };
 
-            props += 1;
             self.step_sky_light_propagation_downwards(position, light_level, &mut propagation_queue);
             self.step_sky_light_propagation_towards(position, Vector3::new(1, 0, 0), light_level, &mut propagation_queue);
             self.step_sky_light_propagation_towards(position, Vector3::new(-1, 0, 0), light_level, &mut propagation_queue);
@@ -450,9 +444,6 @@ impl Chunks3x3 {
             self.step_sky_light_propagation_towards(position, Vector3::new(0, 0, -1), light_level, &mut propagation_queue);
             self.step_sky_light_propagation_towards(position, Vector3::new(0, 1, 0), light_level, &mut propagation_queue);
         }
-        dbg!(now.elapsed());
-        dbg!(props);
-        dbg!(rems);
     }
 
     pub fn propagate_sky_light(&mut self) {

@@ -1,6 +1,6 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
-use cgmath::{num_traits::Euclid, InnerSpace, MetricSpace, Vector3};
+use cgmath::{num_traits::Euclid, InnerSpace, MetricSpace, Vector3, Zero};
 use crate::{chunk_position::ChunkPosition, world::chunk::chunk_part::{CHUNK_SIZE_F32, CHUNK_SIZE_F64, CHUNK_SIZE_I32, INVERSE_CHUNK_SIZE}};
 
 #[derive(Debug, Clone, Copy)]
@@ -428,6 +428,33 @@ impl GlobalVecU {
     #[inline]
     pub fn in_bounds(&self) -> bool {
         self.chunk.y > 0 && self.chunk.y < CHUNK_SIZE_I32
+    }
+
+    #[inline]
+    pub fn touching_sides(&self) -> Option<Vector3<i32>> {
+        const CHUNK_SIZE_I32_MIN_ONE: i32 = CHUNK_SIZE_I32 - 1;
+        let mut sides = Vector3::zero();
+        match self.local.x {
+            CHUNK_SIZE_I32_MIN_ONE => sides.x = 1,
+            0 => sides.x = -1,
+            _ => ()
+        }
+
+        match self.local.y {
+            CHUNK_SIZE_I32_MIN_ONE => sides.y = 1,
+            0 => sides.y = -1,
+            _ => ()
+        }
+
+        match self.local.z {
+            CHUNK_SIZE_I32_MIN_ONE => sides.z = 1,
+            0 => sides.z = -1,
+            _ => ()
+        }
+
+        if sides.x == 0 && sides.y == 0 && sides.z == 0 { return None; }
+
+        Some(sides)
     }
 }
 

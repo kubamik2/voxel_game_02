@@ -6,6 +6,7 @@ use crate::settings::Settings;
 pub mod chunk;
 pub mod structure;
 pub mod player;
+pub mod region;
 
 pub const CHUNK_HEIGHT: usize = CHUNK_SIZE * PARTS_PER_CHUNK;
 pub const PARTS_PER_CHUNK: usize = 12;

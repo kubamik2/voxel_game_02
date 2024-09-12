@@ -18,7 +18,7 @@ pub mod chunk_generator;
 pub mod chunks3x3;
 pub mod chunk_renderer;
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Chunk {
     pub position: Vector2<i32>,
     pub parts: [ChunkPart; PARTS_PER_CHUNK],
@@ -26,7 +26,7 @@ pub struct Chunk {
     pub highest_blocks: HighestBlockPositions,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct HighestBlockPosition {
     pub y: u8,
     pub chunk_part_index: u8,
@@ -39,8 +39,12 @@ impl Default for HighestBlockPosition {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct HighestBlockPositions([HighestBlockPosition; CHUNK_SIZE * CHUNK_SIZE]);
+use serde_big_array::BigArray;
+#[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
+pub struct HighestBlockPositions(
+    #[serde(with = "BigArray")]
+    [HighestBlockPosition; CHUNK_SIZE * CHUNK_SIZE]
+);
 
 impl Default for HighestBlockPositions {
     #[inline]

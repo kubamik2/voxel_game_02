@@ -1,6 +1,6 @@
 use hashbrown::HashMap;
 
-#[derive(serde::Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, PartialEq)]
 pub struct BlockState(HashMap<String, Value>);
  
 impl BlockState {
@@ -14,7 +14,7 @@ impl BlockState {
 }
 
 
-#[derive(serde::Deserialize, Debug, Clone, PartialEq)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 pub enum Value {
     Number(serde_json::Number),
     // I32(i32),

@@ -8,14 +8,16 @@ pub struct DebugGui {
     pub position: GlobalVecF,
     pub light_level: LightLevel,
     pub last_frame_time: std::time::Duration,
+    pub last_update_time: std::time::Duration,
 }
 
 impl DebugGui {
-    pub fn new(world: &World, last_frame_time: std::time::Duration) -> Self {
+    pub fn new(world: &World, last_frame_time: std::time::Duration, last_update_time: std::time::Duration) -> Self {
         Self {
             position: world.player.position,
             light_level: world.chunk_manager.chunk_map.get_light_level(world.player.position.into()).unwrap_or(LightLevel::new(0, 0).unwrap()),
             last_frame_time,
+            last_update_time,
         }
     }
 
@@ -38,6 +40,7 @@ impl DebugGui {
             add_label(ui, format!("global:  x: {: <4.1} y: {: <4.1} z: {: <4.1}", global_position.x, global_position.y, global_position.z));
             add_label(ui, format!("light_level:  block: {: <2}   sky: {: <2}", self.light_level.get_block(), self.light_level.get_sky()));
             add_label(ui, format!("fps: {: <3}   mpf: {: <4.1}", (1.0 / self.last_frame_time.as_secs_f32()).floor() as u32, self.last_frame_time.as_secs_f32() * 1000.0));
+            add_label(ui, format!("last_update_time: {: <4.1} ms", self.last_update_time.as_secs_f64() * 1000.0));
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.centered_and_justified(|center| {

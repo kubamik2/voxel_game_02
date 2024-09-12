@@ -108,7 +108,7 @@ impl Player {
 
         let mut horizontal_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
         let mut vertical_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
-        let speed = 4.0 * dt;
+        let speed = 120.0 * dt;
 
         if self.is_forward_pressed {
             horizontal_movement_vector += forward;
@@ -208,43 +208,6 @@ impl Player {
         }
         
         chunk_manager.changed_blocks.push(voxel_pos);
-        
-        #[inline]
-        fn mark_chunk_part_for_meshing(chunk_manager: &mut ChunkManager, offset: Vector2<i32>, voxel_pos: GlobalVecU) {
-            if let Some(mesh) = chunk_manager.chunk_mesh_map.get_mut(voxel_pos.chunk.xz() + offset) {
-                mesh.parts_need_meshing[voxel_pos.chunk.y as usize] = true;
-                if voxel_pos.chunk.y < PARTS_PER_CHUNK as i32 - 1 && voxel_pos.local().y == CHUNK_SIZE_U32 - 1 {
-                    mesh.parts_need_meshing[voxel_pos.chunk.y as usize + 1] = true;
-                }
-
-                if voxel_pos.chunk.y > 0 && voxel_pos.local().y == 0 {
-                    mesh.parts_need_meshing[voxel_pos.chunk.y as usize - 1] = true;
-                }
-            }
-        }
-        mark_chunk_part_for_meshing(chunk_manager, Vector2::new(0, 0), voxel_pos);
-
-        if voxel_pos.local().x == 0 {
-            mark_chunk_part_for_meshing(chunk_manager, Vector2::new(-1, 0), voxel_pos);
-            if voxel_pos.local().z == 0 {
-                mark_chunk_part_for_meshing(chunk_manager, Vector2::new(-1, -1), voxel_pos);
-            } else if voxel_pos.local().z == CHUNK_SIZE_U32 - 1 {
-                mark_chunk_part_for_meshing(chunk_manager, Vector2::new(-1, 1), voxel_pos);
-            }
-        } else if voxel_pos.local().x == CHUNK_SIZE_U32 - 1 {
-            mark_chunk_part_for_meshing(chunk_manager, Vector2::new(1, 0), voxel_pos);
-            if voxel_pos.local().z == 0 {
-                mark_chunk_part_for_meshing(chunk_manager, Vector2::new(1, -1), voxel_pos);
-            } else if voxel_pos.local().z == CHUNK_SIZE_U32 - 1 {
-                mark_chunk_part_for_meshing(chunk_manager, Vector2::new(1, 1), voxel_pos);
-            }
-        }
-
-        if voxel_pos.local().z == 0 {
-            mark_chunk_part_for_meshing(chunk_manager, Vector2::new(0, -1), voxel_pos);
-        } else if voxel_pos.local().z == CHUNK_SIZE_U32 - 1 {
-            mark_chunk_part_for_meshing(chunk_manager, Vector2::new(0, 1), voxel_pos);
-        }
     }
 }
 

@@ -4,12 +4,12 @@ use super::Block;
 
 pub type BlockPalletItemId = u16;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct BlockPallet {
     items: Vec<Option<BlockPalletItem>>
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct BlockPalletItem {
     pub block: Block,
     pub count: BlockPalletItemId,

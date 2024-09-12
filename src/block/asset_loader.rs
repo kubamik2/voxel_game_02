@@ -52,7 +52,7 @@ pub fn load_blocks<T: Into<std::path::PathBuf>>(path: T, base_cuboid_block_model
         std::fs::File::open(entry.path())?.read_to_string(&mut contents)?;
         let block_deserialize: BlockDeserialize = serde_json::from_str(&contents)?;
 
-        let block_info = BlockInformation::new(id, &block_name, block_deserialize.default_state, block_deserialize.base_properties);
+        let block_info = BlockInformation::new(id, &block_name, block_deserialize.default_state, block_deserialize.base_properties.into());
 
         let mut block_model_variants = vec![];
         for variant in block_deserialize.variants {

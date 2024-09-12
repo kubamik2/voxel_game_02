@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use block_state::BlockState;
-use cgmath::{num_traits::Signed, Vector3, Zero};
+use cgmath::Vector3;
 use light::LIGHT_LEVEL_MAX_VALUE;
 use serde::Deserialize;
 
@@ -17,7 +17,7 @@ pub mod quad_buffer;
 pub const FACE_DIRECTIONS_NUM: usize = std::mem::variant_count::<FaceDirection>();
 pub type BlockId = u16;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Block {
     id: BlockId,
     name: Arc<str>,
@@ -113,7 +113,7 @@ impl Into<Block> for BlockInformation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LightAttenuation([u8; FACE_DIRECTIONS_NUM / 2]);
 
 impl LightAttenuation {
@@ -188,7 +188,7 @@ pub fn deserialize_light_attenuation_option<'de, D>(deserialize: D) -> Result<Op
     Option::<LightAttenuationDeserialize>::deserialize(deserialize).map(|f| f.map(|f| f.into()))
 }
 
-#[derive(serde::Deserialize, PartialEq, Clone, Copy, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Clone, Copy, Debug)]
 pub struct Properties {
     #[serde(default)]
     pub alpha_mode: AlphaMode,
@@ -202,11 +202,56 @@ pub struct Properties {
     #[serde(default = "bool_true")]
     pub collideable: bool,
 
-    #[serde(deserialize_with = "deserialize_light_attenuation")]
     pub light_attenuation: LightAttenuation,
 
     #[serde(default = "u8_0")]
     pub emitted_light: u8,
+}
+
+#[derive(serde::Deserialize)]
+pub struct PropertiesDeserialize {
+    #[serde(default)]
+    pub alpha_mode: AlphaMode,
+
+    #[serde(default = "bool_true")]
+    pub targetable: bool,
+
+    #[serde(default = "bool_false")]
+    pub replaceable: bool,
+
+    #[serde(default = "bool_true")]
+    pub collideable: bool,
+
+    pub light_attenuation: LightAttenuationDeserialize,
+
+    #[serde(default = "u8_0")]
+    pub emitted_light: u8,
+}
+
+impl Default for PropertiesDeserialize {
+    fn default() -> Self {
+        Self {
+            alpha_mode: AlphaMode::default(),
+            targetable: true,
+            replaceable: false,
+            collideable: true,
+            light_attenuation: LightAttenuationDeserialize { px: LIGHT_LEVEL_MAX_VALUE, nx: LIGHT_LEVEL_MAX_VALUE, py: LIGHT_LEVEL_MAX_VALUE, ny: LIGHT_LEVEL_MAX_VALUE, pz: LIGHT_LEVEL_MAX_VALUE, nz: LIGHT_LEVEL_MAX_VALUE },
+            emitted_light: 0
+        }       
+    }
+}
+
+impl Into<Properties> for PropertiesDeserialize {
+    fn into(self) -> Properties {
+        Properties {
+            alpha_mode: self.alpha_mode,
+            targetable: self.targetable,
+            replaceable: self.replaceable,
+            collideable: self.collideable,
+            light_attenuation: self.light_attenuation.into(),
+            emitted_light: self.emitted_light,
+        }
+    }
 }
 
 impl Properties {
@@ -274,7 +319,7 @@ impl Default for PropertiesOptional {
 }
 
 
-#[derive(serde::Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Clone, Copy, Debug)]
 pub enum AlphaMode {
     Opaque,
     Transparent,

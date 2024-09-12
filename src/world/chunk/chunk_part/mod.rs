@@ -6,6 +6,7 @@ use std::ops::{Index, IndexMut};
 
 use cgmath::Vector3;
 use chunk_part_position::ChunkPartPosition;
+use serde::Serialize;
 
 use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::{LightLevel, LightNode}, Block}, BLOCK_LIST};
 
@@ -18,13 +19,12 @@ pub const CHUNK_SIZE_U32: u32 = CHUNK_SIZE as u32;
 pub const INVERSE_CHUNK_SIZE: f32 = 1.0 / CHUNK_SIZE_F32;
 
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChunkPart {
     pub block_pallet: BlockPallet,
     pub block_layers: BlockLayers,
     pub light_level_layers: LightLevelLayers,
-    pub added_light_emitters: Vec<Vector3<usize>>,
-    pub removed_light_emitters: Vec<Vector3<usize>>,
+    pub was_modified: bool,
 }
 
 impl ChunkPart {
@@ -32,7 +32,7 @@ impl ChunkPart {
         let block_pallet = BlockPallet::new_air();
         let block_layers = BlockLayers::new_uncompressed();
         let light_level_layers = LightLevelLayers::new_uncompressed();
-        Self { block_layers, block_pallet, light_level_layers, added_light_emitters: vec![], removed_light_emitters: vec![] }
+        Self { block_layers, block_pallet, light_level_layers, was_modified: false }
     }
 
     #[inline]
@@ -59,6 +59,7 @@ impl ChunkPart {
         
         self.set_block_light_level(local_position, new_block_light_level);
         self.set_sky_light_level(local_position, 0);
+        self.was_modified = true;
     }
 
     #[inline]
@@ -73,6 +74,7 @@ impl ChunkPart {
         old_block_pallet_item.count -= 1;
 
         self.block_layers.set_block_pallet_id(local_position, block_pallet_id);
+        self.was_modified = true;
     }
 
     #[inline]
@@ -92,6 +94,7 @@ impl ChunkPart {
         let mut light_level = *self.light_level_layers.get_light_level(position);
         light_level.set_block(level);
         self.light_level_layers.set_light_level(position, light_level);
+        self.was_modified = true;
     }
 
     #[inline]
@@ -105,6 +108,7 @@ impl ChunkPart {
         let mut light_level = *self.light_level_layers.get_light_level(position);
         light_level.set_sky(level);
         self.light_level_layers.set_light_level(position, light_level);
+        self.was_modified = true;
     }
 
     #[inline]
@@ -116,6 +120,7 @@ impl ChunkPart {
     #[inline]
     pub fn set_light_level(&mut self, position: ChunkPartPosition, light_level: LightLevel) {
         self.light_level_layers.set_light_level(position, light_level);
+        self.was_modified = true;
     }
 
     #[inline]
@@ -125,7 +130,7 @@ impl ChunkPart {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct BlockLayers(pub [BlockLayer; CHUNK_SIZE]);
 
 impl BlockLayers {
@@ -197,13 +202,27 @@ impl Index<ChunkPartPosition> for BlockLayers {
     }
 }
 
-#[derive(Clone)]
+use serde_big_array::BigArray;
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum BlockLayer {
+    #[serde(deserialize_with = "BlockLayer::deserialize", serialize_with = "BlockLayer::serialize")]
     Uncompressed(Box<[BlockPalletItemId; CHUNK_SIZE * CHUNK_SIZE]>),
     Compressed(BlockPalletItemId)
 }
 
 impl BlockLayer {
+    #[inline]
+    fn deserialize<'de, D>(deserializer: D) -> Result<Box<[u16; CHUNK_SIZE * CHUNK_SIZE]>, D::Error> where D: serde::Deserializer<'de> {
+        let arr: [BlockPalletItemId; CHUNK_SIZE * CHUNK_SIZE] = BigArray::deserialize(deserializer)?;
+        Ok(Box::new(arr))
+    }
+
+    #[inline]
+    fn serialize<S>(item: &[BlockPalletItemId; CHUNK_SIZE * CHUNK_SIZE], serializer: S) -> Result<<S as serde::Serializer>::Ok, <S as serde::Serializer>::Error> where S: serde::Serializer {
+        (*item).serialize(serializer)
+    }
+
     #[inline]
     pub fn can_be_compressed(&self) -> bool {
         match self {
@@ -221,7 +240,7 @@ impl BlockLayer {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct LightLevelLayers([LightLevelLayer; CHUNK_SIZE]);
 
 impl LightLevelLayers {
@@ -305,13 +324,25 @@ impl Index<ChunkPartPosition> for LightLevelLayers {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum LightLevelLayer {
+    #[serde(deserialize_with = "LightLevelLayer::deserialize", serialize_with = "LightLevelLayer::serialize")]
     Uncompressed(Box<[LightLevel; CHUNK_SIZE * CHUNK_SIZE]>),
     Compressed(LightLevel)
 }
 
 impl LightLevelLayer {
+    #[inline]
+    fn deserialize<'de, D>(deserializer: D) -> Result<Box<[LightLevel; CHUNK_SIZE * CHUNK_SIZE]>, D::Error> where D: serde::Deserializer<'de> {
+        let arr: [LightLevel; CHUNK_SIZE * CHUNK_SIZE] = BigArray::deserialize(deserializer)?;
+        Ok(Box::new(arr))
+    }
+
+    #[inline]
+    fn serialize<S>(item: &[LightLevel; CHUNK_SIZE * CHUNK_SIZE], serializer: S) -> Result<<S as serde::Serializer>::Ok, <S as serde::Serializer>::Error> where S: serde::Serializer {
+        (*item).serialize(serializer)
+    }
+
     #[inline]
     pub fn can_be_compressed(&self) -> bool {
         match self {

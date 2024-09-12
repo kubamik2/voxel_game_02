@@ -1,7 +1,7 @@
 pub const LIGHT_LEVEL_BITS: u32 = 4;
 pub const LIGHT_LEVEL_MAX_VALUE: u8 = (1 << LIGHT_LEVEL_BITS) - 1;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)] // TODO implement Debug manually
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Deserialize, serde::Serialize)] // TODO implement Debug manually
 pub struct LightLevel(u8);
 
 impl LightLevel {

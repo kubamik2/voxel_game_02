@@ -106,7 +106,7 @@ impl ChunkGenerator {
                         if density > 0.0 {
                             let position = unsafe { ChunkPartPosition::new_unchecked(Vector3 { x, y, z }) };
                             part.set_block_pallet_id(position, stone_id);
-                            let highest_block_position = &mut chunk.highest_blocks[Vector2::new(x as usize, z as usize)];
+                            let highest_block_position = &mut chunk.highest_blocks[Vector2::new(x as u8, z as u8)];
                             if (chunk_part_index as u8 > highest_block_position.chunk_part_index)
                             || (chunk_part_index as u8 == highest_block_position.chunk_part_index && y as u8 > highest_block_position.y) {
                                 highest_block_position.chunk_part_index = chunk_part_index as u8;
@@ -166,7 +166,7 @@ impl ChunkGenerator {
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 if fbm[x + z * CHUNK_SIZE] > 0.06 {
-                    let highest_block_position = chunks3x3.center_chunk().highest_blocks[Vector2::new(x, z)];
+                    let highest_block_position = chunks3x3.center_chunk().highest_blocks[Vector2::new(x as u8, z as u8)];
                     let highest_y = (highest_block_position.y as usize + highest_block_position.chunk_part_index as usize * CHUNK_SIZE) as i32;
                     let tree = STRUCTURES.get("tree").unwrap();
 

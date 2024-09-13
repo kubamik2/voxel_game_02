@@ -1,5 +1,5 @@
 #![feature(variant_count, float_next_up_down, downcast_unchecked, new_zeroed_alloc, portable_simd)]
-use block::{asset_loader::{BlockList, BlockMap}, model::{block_model_variant::BlockModelVariants, QuadRaw}, Block};
+use block::{asset_loader::{BlockList, BlockMap}, model::{block_model_variant::BlockModelVariants, QuadRaw}, Block, BlockId};
 use cgmath::Vector3;
 use hashbrown::HashMap;
 use game::Game;
@@ -34,14 +34,7 @@ lazy_static::lazy_static! {
     pub static ref BLOCK_LIST: BlockList = _TEMP.1.clone();
     pub static ref BLOCK_MODEL_VARIANTS: BlockModelVariants = _TEMP.2.clone();
     pub static ref QUADS: Vec<QuadRaw> = _TEMP.3.clone();
-    // pub static ref OBSTRUCTS_LIGHT_CACHE: bitmaps::Bitmap<1024> = {
-    //     let mut bitmap = bitmaps::Bitmap::new();
-
-    //     for (i, info) in BLOCK_LIST.iter().enumerate() {
-    //         bitmap.set(i, info.properties().light_obstruction);
-    //     }
-    //     bitmap
-    // };
+    pub static ref AIR_ID: BlockId = *BLOCK_MAP.get("air").unwrap().id();
 
     pub static ref STRUCTURES: HashMap<String, Structure> = {
         let mut structures = HashMap::new();

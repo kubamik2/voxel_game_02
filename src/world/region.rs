@@ -43,6 +43,13 @@ impl Region {
     fn position_to_file_name(position: Vector2<i32>) -> String {
         format!("{}_{}", position.x, position.y)
     }
+
+    pub fn are_all_chunks_unloaded(&self) -> bool {
+        for chunk in self.chunks.values() {
+
+        }
+        true
+    }
 }
 
 pub struct Regions(HashMap<Vector2<i32>, Region>);

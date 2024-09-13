@@ -5,7 +5,7 @@ use cgmath::Vector3;
 use light::LIGHT_LEVEL_MAX_VALUE;
 use serde::Deserialize;
 
-use crate::{BLOCK_LIST, BLOCK_MODEL_VARIANTS};
+use crate::{AIR_ID, BLOCK_LIST, BLOCK_MODEL_VARIANTS};
 
 pub mod model;
 pub mod light;
@@ -44,10 +44,12 @@ impl Block {
         block
     }
 
+    #[inline]
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    #[inline]
     pub fn id(&self) -> BlockId {
         self.id
     }
@@ -55,6 +57,11 @@ impl Block {
     #[inline]
     pub fn properties(&self) -> Properties {
         self.properties
+    }
+
+    #[inline]
+    pub fn is_air(&self) -> bool {
+        self.id() == *AIR_ID
     }
 }
 

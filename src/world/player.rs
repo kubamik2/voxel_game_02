@@ -108,7 +108,7 @@ impl Player {
 
         let mut horizontal_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
         let mut vertical_movement_vector: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
-        let speed = 120.0 * dt;
+        let speed = 4.0 * dt;
 
         if self.is_forward_pressed {
             horizontal_movement_vector += forward;

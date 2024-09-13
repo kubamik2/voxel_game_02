@@ -2,7 +2,7 @@ use std::{fmt::Debug, ops::{Index, IndexMut}, sync::OnceLock};
 
 use cgmath::{Vector2, Vector3};
 use chunk_generator::GenerationStage;
-use chunk_part::{ChunkPart, CHUNK_SIZE};
+use chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE};
 use wgpu::util::DeviceExt;
 
 use crate::{block::{light::LightLevel, Block}, chunk_position::ChunkPosition, BLOCK_LIST};
@@ -53,18 +53,18 @@ impl Default for HighestBlockPositions {
     }
 }
 
-impl Index<Vector2<usize>> for HighestBlockPositions {
+impl Index<Vector2<u8>> for HighestBlockPositions {
     type Output = HighestBlockPosition;
     #[inline]
-    fn index(&self, index: Vector2<usize>) -> &Self::Output {
-        &self.0[index.x + index.y * CHUNK_SIZE]
+    fn index(&self, index: Vector2<u8>) -> &Self::Output {
+        &self.0[index.x as usize + index.y as usize * CHUNK_SIZE]
     }
 }
 
-impl IndexMut<Vector2<usize>> for HighestBlockPositions {
+impl IndexMut<Vector2<u8>> for HighestBlockPositions {
     #[inline]
-    fn index_mut(&mut self, index: Vector2<usize>) -> &mut Self::Output {
-        &mut self.0[index.x + index.y * CHUNK_SIZE]
+    fn index_mut(&mut self, index: Vector2<u8>) -> &mut Self::Output {
+        &mut self.0[index.x as usize + index.y as usize * CHUNK_SIZE]
     }
 }
 
@@ -119,16 +119,42 @@ impl Chunk {
         chunk_part.get_block(position.chunk_part_position())
     }
 
-    // TODO update the highest block
     #[inline]
     pub fn set_block(&mut self, position: ChunkPosition, block: Block) {
+        let highest_block_position = &mut self.highest_blocks[position.chunk_part_position().xz()];
+        if block.is_air() && position.chunk_part_index() as u8 == highest_block_position.chunk_part_index && position.chunk_part_position().y == highest_block_position.y {
+            Self::find_new_highest_block(&self.parts, position, highest_block_position);
+        } else if (position.chunk_part_index() as u8 == highest_block_position.chunk_part_index && position.chunk_part_position().y > highest_block_position.y)
+        || (position.chunk_part_index() as u8 > highest_block_position.chunk_part_index) {
+            *highest_block_position = HighestBlockPosition { chunk_part_index: position.chunk_part_index() as u8, y: position.chunk_part_position().y };
+        }
         let chunk_part = &mut self.parts[position.chunk_part_index()];
-        // if block.name() != "air" {
-        //     let highest_block_position = &mut self.highest_blocks[chunk_part_position.xz()];
-        //     highest_block_position.y = chunk_part_position.y as u8;
-        //     highest_block_position.chunk_part_index = chunk_part_index as u8;
-        // }
         chunk_part.set_block(position.chunk_part_position(), block);
+    }
+
+    #[inline]
+    fn find_new_highest_block(parts: &[ChunkPart; PARTS_PER_CHUNK], position: ChunkPosition, prev_highest_block_position: &mut HighestBlockPosition) {
+        let chunk_part = &parts[position.chunk_part_index()];
+        for y in (0..prev_highest_block_position.y).rev() {
+            let chunk_part_position = unsafe { ChunkPartPosition::new_unchecked(Vector3::new(position.chunk_part_position().x as u32, y as u32, position.chunk_part_position().z as u32)) };
+            if !chunk_part.get_block(chunk_part_position).is_air() {
+                *prev_highest_block_position = HighestBlockPosition { chunk_part_index: prev_highest_block_position.chunk_part_index, y };
+                return;
+            }
+        }
+
+        for chunk_part_index in 0..prev_highest_block_position.chunk_part_index {
+            let chunk_part = &parts[chunk_part_index as usize];
+            for y in (0..CHUNK_SIZE as u8).rev() {
+                let chunk_part_position = unsafe { ChunkPartPosition::new_unchecked(Vector3::new(position.chunk_part_position().x as u32, y as u32, position.chunk_part_position().z as u32)) };
+                if !chunk_part.get_block(chunk_part_position).is_air() {
+                    *prev_highest_block_position = HighestBlockPosition { chunk_part_index, y };
+                    return;
+                }
+            }
+        }
+
+        *prev_highest_block_position = HighestBlockPosition { chunk_part_index: 0, y: 0 };
     }
 
     #[inline]

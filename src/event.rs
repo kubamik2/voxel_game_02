@@ -1,6 +1,10 @@
 use crate::typemap::TypeMap;
+use std::sync::{mpsc::{channel, Sender, Receiver}, Arc};
 
-pub struct EventQueue<E: 'static> {
+
+pub trait Event = 'static + Send;
+
+pub struct EventQueue<E: Event> {
     queue_old: Vec<E>,
     queue_old_state_event_count: u32,
     queue_new: Vec<E>,
@@ -8,7 +12,7 @@ pub struct EventQueue<E: 'static> {
     event_count: u32,
 }
 
-impl<E: 'static> EventQueue<E> {
+impl<E: Event> EventQueue<E> {
     pub fn new() -> Self {
         Self {
             queue_old: vec![],
@@ -33,14 +37,17 @@ impl<E: 'static> EventQueue<E> {
     }
 }
 
-pub struct EventReader<E: 'static> {
+pub struct EventReader<E: Event> {
     last_event_counter: u32,
     _generic: std::marker::PhantomData<E>,
 }
 
-impl<E: 'static> EventReader<E> {
+impl<E: Event> EventReader<E> {
     pub fn new(events: &Events) -> Self {
-        let last_event_counter = events.get_event_queue::<E>().expect(std::any::type_name::<E>()).event_count;
+        let last_event_counter = events
+            .get_event_queue::<E>()
+            .unwrap_or_else(|| panic!("get_event_queue() failed, {} not found", std::any::type_name::<E>()))
+            .event_count;
 
         Self {
             last_event_counter,
@@ -54,12 +61,12 @@ impl<E: 'static> EventReader<E> {
     }
 }
 
-pub struct EventIterator<'a, E: 'static> {
+pub struct EventIterator<'a, E: Event> {
     inner: std::iter::Chain<std::slice::Iter<'a, E>, std::slice::Iter<'a, E>>,
     last_event_counter: &'a mut u32,
 }
 
-impl<'a, E: 'static> EventIterator<'a, E> {
+impl<'a, E: Event> EventIterator<'a, E> {
     pub fn new(event_queue: &'a EventQueue<E>, last_event_counter: &'a mut u32) -> Self {
         *last_event_counter = (*last_event_counter).max(event_queue.queue_old_state_event_count);
         let queue_old_sliced_index = ((*last_event_counter - event_queue.queue_old_state_event_count) as usize).min(event_queue.queue_old.len());
@@ -75,7 +82,7 @@ impl<'a, E: 'static> EventIterator<'a, E> {
     }
 }
 
-impl<'a, E: 'static> Iterator for EventIterator<'a, E> {
+impl<'a, E: Event> Iterator for EventIterator<'a, E> {
     type Item = &'a E;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.inner.next() {
@@ -86,9 +93,11 @@ impl<'a, E: 'static> Iterator for EventIterator<'a, E> {
     }
 }
 
+type EventUpdateFunction = Box<dyn FnMut(&mut TypeMap)>;
+
 pub struct Events {
     events: TypeMap,
-    event_queue_updates: Vec<Box<dyn FnMut(&mut TypeMap)>>,
+    event_queue_updates: Vec<EventUpdateFunction>,
 }
 
 impl Events {
@@ -96,21 +105,24 @@ impl Events {
         Self { events: TypeMap::new(), event_queue_updates: vec![] }
     }
 
-    pub fn get_event_queue<E: 'static>(&self) -> Option<&EventQueue<E>> {
+    #[inline]
+    pub fn get_event_queue<E: Event>(&self) -> Option<&EventQueue<E>> {
         self.events.get::<EventQueue<E>>()
     }
 
-    pub fn get_mut_event_queue<E: 'static>(&mut self) -> Option<&mut EventQueue<E>> {
+    #[inline]
+    pub fn get_mut_event_queue<E: Event>(&mut self) -> Option<&mut EventQueue<E>> {
         self.events.get_mut::<EventQueue<E>>()
     }
 
-    fn insert_new_event_queue<E: 'static>(&mut self) {
+    #[inline]
+    fn insert_new_event_queue<E: Event>(&mut self) {
         self.events.insert::<EventQueue<E>>(EventQueue::new());
     }
 
     #[inline]
-    pub fn register_event_type<E: 'static>(&mut self) {
-        fn update_event_queue<E: 'static>(events: &mut TypeMap) {
+    pub fn register_event_type<E: Event>(&mut self) {
+        fn update_event_queue<E: Event>(events: &mut TypeMap) {
             let event_queue = events.get_mut::<EventQueue<E>>().unwrap();
             event_queue.update();
         }
@@ -120,8 +132,8 @@ impl Events {
     }
 
     #[inline]
-    pub fn send<E: 'static>(&mut self, event: E) {
-        let event_queue = self.get_mut_event_queue().expect(std::any::type_name::<E>());
+    pub fn send<E: Event>(&mut self, event: E) {
+        let event_queue = self.get_mut_event_queue().unwrap_or_else(|| panic!("get_mut_event_queue() failed, {} not found", std::any::type_name::<E>()));
         event_queue.send(event);
     }
 

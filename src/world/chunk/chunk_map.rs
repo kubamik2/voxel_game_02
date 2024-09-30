@@ -36,8 +36,7 @@ impl ChunkMap {
     #[inline]
     pub fn get_mut_chunk(&mut self, position: Vector2<i32>) -> Option<&mut Chunk> {
         let chunk = self.chunks.get_mut(&position)?;
-        assert!(Arc::strong_count(chunk) == 1);
-        Some(Arc::make_mut(chunk))
+        Arc::get_mut(chunk)
     }
 
     #[inline]

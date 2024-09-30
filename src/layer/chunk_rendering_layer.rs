@@ -11,7 +11,7 @@ pub struct ChunkRenderingLayer {
 
 impl Layer for ChunkRenderingLayer {
     fn on_render(&mut self, events: &mut crate::event::Events, game: &mut Game) {
-        for event in self.chunk_update_mesh_reader.read(&events).cloned() {
+        for event in self.chunk_update_mesh_reader.read(events).cloned() {
             let meshes = event.meshes;
             self.meshes = meshes;
         }

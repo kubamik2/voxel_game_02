@@ -53,31 +53,6 @@ impl ChunkManager {
         meshes.into_boxed_slice()
     }
     
-    pub fn print_chunk_generation_stages(&self) {
-        let mut s = vec![vec!['.'; 1 + 2 * (self.render_radius as usize)]; 1 + 2 * (self.render_radius as usize)];
-        for chunk in self.chunk_map.values() {
-            let gen_stage = chunk.generation_stage;
-            let mut pos = chunk.position;
-            pos += Vector2::new(self.render_radius as i32, self.render_radius as i32);
-            let pos = pos.cast::<usize>().unwrap();
-            s[pos.y][pos.x] = match gen_stage {
-                GenerationStage::Empty => 'E',
-                GenerationStage::Shape => 'S',
-                GenerationStage::Terrain => 'T',
-                GenerationStage::Decoration => 'D',
-                GenerationStage::Light => 'L',
-            };
-        }
-        let mut string = String::new();
-        for row in s {
-            for c in row {
-                string.push(c);
-            }
-            string.push('\n');
-        }
-        println!("{}", string);
-    }
-
     pub fn update(&mut self, device: &wgpu::Device) {
         for gen_out in self.chunk_generator.iter_outputs() {
             match gen_out {
@@ -105,7 +80,7 @@ impl ChunkManager {
                 if !self.chunk_map.is_chunk_surrounded_by_chunks_at_least_at_stage(chunk.position, chunk.generation_stage) { continue; }
                 chunk.generation_stage
             };
-            self.chunk_generator.generate_chunk_to_next_stage(generation_stage, &mut self.chunk_map, chunk_position.into(), &mut self.scheduled_generations);
+            self.chunk_generator.generate_chunk_to_next_stage(generation_stage, &mut self.chunk_map, chunk_position, &mut self.scheduled_generations);
             issued_generations += 1;
         }
 

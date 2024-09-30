@@ -1,4 +1,4 @@
-#![feature(variant_count, float_next_up_down, downcast_unchecked, new_zeroed_alloc, portable_simd)]
+#![feature(variant_count, float_next_up_down, downcast_unchecked, new_zeroed_alloc, portable_simd, trait_alias, mapped_lock_guards)]
 use block::{asset_loader::{BlockList, BlockMap}, model::{block_model_variant::BlockModelVariants, QuadRaw}, Block, BlockId};
 use cgmath::Vector3;
 use hashbrown::HashMap;

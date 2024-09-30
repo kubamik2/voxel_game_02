@@ -2,7 +2,7 @@ pub mod game_logic_layer;
 pub mod chunk_rendering_layer;
 pub mod game_window_layer;
 
-use crate::{game::Game, event::Events};
+use crate::{game::Game, event::{Events, Event}};
 
 pub trait Layer {
     fn on_attach(&mut self, events: &mut Events) {}
@@ -61,7 +61,7 @@ impl LayerStack {
         game.is_render_frame = false;
     }
 
-    pub fn register_event_type<E: 'static + Clone>(&mut self) {
+    pub fn register_event_type<E: Event>(&mut self) {
         self.events.register_event_type::<E>();
     }
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use cgmath::{Vector2, Vector3};
 
-use crate::{camera::Camera, event::{EventReader, EventManager}, game::Game, game_window::{KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, global_vector::GlobalVecU, gui::DebugGui, interval::Interval, layer::Layer, settings::Settings, world::{region::Region, chunk::{chunk_part::CHUNK_SIZE_I32, chunks3x3::Chunks3x3, dynamic_chunk_mesh::DynamicChunkMesh}, World, PARTS_PER_CHUNK}, BLOCK_MAP};
+use crate::{camera::Camera, event::{EventManager, EventReader}, game::Game, game_window::{KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, global_vector::GlobalVecU, gui::DebugGui, interval::Interval, layer::Layer, settings::Settings, world::{chunk::{chunk_part::CHUNK_SIZE_I32, chunks3x3::Chunks3x3, dynamic_chunk_mesh::DynamicChunkMesh}, region::Region, World, PARTS_PER_CHUNK}, BLOCK_MAP, GLOBAL_RESOURCES};
 
 pub struct GameLogicLayer {
     world: World,
@@ -15,7 +15,7 @@ pub struct GameLogicLayer {
 }
 
 impl Layer for GameLogicLayer {
-    fn on_update(&mut self, event_manager: &mut EventManager, game: &mut Game) {
+    fn on_update(&mut self, event_manager: &EventManager, game: &mut Game) {
         self.interval_300hz.tick(|| {
             self.world.chunk_manager.update(&game.device);
         });
@@ -104,7 +104,7 @@ impl Layer for GameLogicLayer {
         }
     }
 
-    fn on_render(&mut self, events: &mut EventManager, game: &mut Game) {
+    fn on_render(&mut self, events: &EventManager, game: &mut Game) {
         let dt = game.last_render_instant.elapsed();
         self.world.player.update(dt.as_secs_f32());
         let debug_gui = DebugGui::new(&self.world, dt, game.last_update_time);
@@ -115,7 +115,8 @@ impl Layer for GameLogicLayer {
 }
 
 impl GameLogicLayer {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, surface_config: &wgpu::SurfaceConfiguration, event_manager: &EventManager, settings: &Settings) -> anyhow::Result<Self> {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, surface_config: &wgpu::SurfaceConfiguration, settings: &Settings) -> anyhow::Result<Self> {
+        let event_manager = (*GLOBAL_RESOURCES).get::<EventManager>().unwrap();
         Ok(Self {
             world: World::new(device, queue, surface_config, settings)?,
             interval_300hz: Interval::new_hz(300.0),

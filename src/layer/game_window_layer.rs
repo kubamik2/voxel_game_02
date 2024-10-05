@@ -1,6 +1,6 @@
 use winit::{event::{DeviceEvent, WindowEvent}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::{event::{EventReader, EventManager}, game_window::{GameWindowEvent, KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}};
+use crate::{event::{EventManager, EventReader}, game_window::{GameWindowEvent, KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, GLOBAL_RESOURCES};
 
 use super::Layer;
 
@@ -9,7 +9,7 @@ pub struct GameWindowLayer {
 }
 
 impl Layer for GameWindowLayer {
-    fn on_update(&mut self, events: &mut crate::event::EventManager, game: &mut crate::game::Game) {
+    fn on_update(&mut self, events: &crate::event::EventManager, game: &mut crate::game::Game) {
         if game.render_thread.is_work_done() {
             game.game_window.window().request_redraw();
         }
@@ -65,7 +65,7 @@ impl Layer for GameWindowLayer {
 
     }
 
-    fn on_render(&mut self, events: &mut EventManager, game: &mut crate::game::Game) {
+    fn on_render(&mut self, events: &EventManager, game: &mut crate::game::Game) {
         game.game_window.window().set_cursor_visible(false);
         game.egui_winit_state.handle_platform_output(game.game_window.window(), game.egui_full_output.platform_output.clone());
         let raw_input = game.egui_winit_state.take_egui_input(game.game_window.window());
@@ -74,9 +74,10 @@ impl Layer for GameWindowLayer {
 }
 
 impl GameWindowLayer {
-    pub fn new(events: &EventManager) -> Self {
+    pub fn new() -> Self {
+        let event_manager = (*GLOBAL_RESOURCES).get::<EventManager>().unwrap();
         Self {
-            winit_event_reader: EventReader::new(events),
+            winit_event_reader: EventReader::new(event_manager),
         }
     }
 }

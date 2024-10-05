@@ -81,7 +81,13 @@ pub static GLOBAL_RESOURCES: std::sync::LazyLock<GlobalResources> = std::sync::L
     GlobalResourcesBuilder::default()
         .register_resource(
             EventManagerBuilder::default()
-                .build()
+            .register_event_type::<game_window::GameWindowEvent>()
+            .register_event_type::<layer::game_logic_layer::ChunkUpdateRenderMesh>()
+            .register_event_type::<game_window::KeyboardInputEvent>()
+            .register_event_type::<game_window::MouseInputEvent>()
+            .register_event_type::<game_window::MouseMoveEvent>()
+            .register_event_type::<winit::event::Event<()>>()
+            .build()
         )
         .build()
 );

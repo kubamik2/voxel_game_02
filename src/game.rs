@@ -4,7 +4,7 @@ use egui::Color32;
 use wgpu::{Device, Features, Queue};
 use winit::{event::Event, event_loop::EventLoop};
 
-use crate::{game_window::{GameWindow, GameWindowEvent, KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, layer::{game_logic_layer::{GameLogicLayer, ChunkUpdateRenderMesh}, chunk_rendering_layer::ChunkRenderingLayer, game_window_layer::GameWindowLayer, LayerStack}, render_thread::RenderThread, settings::Settings};
+use crate::{event::EventManager, game_window::{GameWindow, GameWindowEvent, KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, layer::{chunk_rendering_layer::ChunkRenderingLayer, game_logic_layer::{ChunkUpdateRenderMesh, GameLogicLayer}, game_window_layer::GameWindowLayer, LayerStack}, render_thread::RenderThread, settings::Settings, GLOBAL_RESOURCES};
 
 pub struct Game {
     pub game_window: GameWindow,
@@ -154,24 +154,18 @@ impl Game {
     pub fn run<T: Into<std::path::PathBuf>>(settings_path: T) -> anyhow::Result<()> {
         let settings_path = settings_path.into();
         let (mut game, event_loop) = pollster::block_on(Self::new(&settings_path))?;
+        let event_manager = (*GLOBAL_RESOURCES).get::<EventManager>().unwrap();
         
-        let mut layers = LayerStack::new(|f| {
-            f.register_event_type::<GameWindowEvent>()
-            .register_event_type::<ChunkUpdateRenderMesh>()
-            .register_event_type::<KeyboardInputEvent>()
-            .register_event_type::<MouseInputEvent>()
-            .register_event_type::<MouseMoveEvent>()
-            .register_event_type::<Event<()>>()
-        });
+        let mut layers = LayerStack::new();
 
 
-        layers.push_layer(Box::new(GameWindowLayer::new(&layers.event_manager)));
-        layers.push_layer(Box::new(GameLogicLayer::new(&game.device, &game.queue, &game.surface_config, &layers.event_manager, &game.settings).unwrap()));
-        layers.push_layer(Box::new(ChunkRenderingLayer::new(&layers.event_manager)));
+        layers.push_layer(Box::new(GameWindowLayer::new()));
+        layers.push_layer(Box::new(GameLogicLayer::new(&game.device, &game.queue, &game.surface_config, &game.settings).unwrap()));
+        layers.push_layer(Box::new(ChunkRenderingLayer::new()));
 
         event_loop.run(move |event, elwt| {
             elwt.set_control_flow(winit::event_loop::ControlFlow::Poll);
-            layers.event_manager.send(event);
+            event_manager.send(event);
             layers.update(&mut game);
             if game.quit {
                 elwt.exit();

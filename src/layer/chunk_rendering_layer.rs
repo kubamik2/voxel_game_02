@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{game::Game, event::{EventReader, EventManager}, layer::Layer, render_thread::RenderArgs, world::chunk::dynamic_chunk_mesh::DynamicChunkMesh};
+use crate::{event::{EventManager, EventReader}, game::Game, layer::Layer, render_thread::RenderArgs, world::chunk::dynamic_chunk_mesh::DynamicChunkMesh, GLOBAL_RESOURCES};
 
 use super::game_logic_layer::ChunkUpdateRenderMesh;
 
@@ -10,7 +10,7 @@ pub struct ChunkRenderingLayer {
 }
 
 impl Layer for ChunkRenderingLayer {
-    fn on_render(&mut self, events: &mut crate::event::EventManager, game: &mut Game) {
+    fn on_render(&mut self, events: &crate::event::EventManager, game: &mut Game) {
         for event in self.chunk_update_mesh_reader.read().cloned() {
             let meshes = event.meshes;
             self.meshes = meshes;
@@ -28,10 +28,11 @@ impl Layer for ChunkRenderingLayer {
 }
 
 impl ChunkRenderingLayer {
-    pub fn new(events: &EventManager) -> Self {
+    pub fn new() -> Self {
+        let event_manager = (*GLOBAL_RESOURCES).get::<EventManager>().unwrap();
         Self {
             meshes: Arc::new([]),
-            chunk_update_mesh_reader: EventReader::new(events),
+            chunk_update_mesh_reader: EventReader::new(event_manager),
         }
     }
 }

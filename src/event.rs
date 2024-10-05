@@ -1,9 +1,12 @@
+use arc_swap::{access::{Access, DynAccess}, ArcSwap};
+
 use crate::typemap::TypeMap;
 use std::sync::{mpsc::{channel, Sender, Receiver}, Arc};
 
 
-pub trait Event = 'static + Send;
+pub trait Event = 'static + Send + Clone + Sync;
 
+#[derive(Clone)]
 pub struct EventQueue<E: Event> {
     queue_old: Vec<E>,
     queue_old_state_event_count: u32,
@@ -31,7 +34,6 @@ impl<E: Event> EventQueue<E> {
     pub fn update(&mut self) {
         std::mem::swap(&mut self.queue_new, &mut self.queue_old);
         self.queue_new.clear();
-
         self.queue_old_state_event_count = self.queue_new_state_event_count;
         self.queue_new_state_event_count += self.queue_old.len() as u32;
     }
@@ -39,25 +41,30 @@ impl<E: Event> EventQueue<E> {
 
 pub struct EventReader<E: Event> {
     last_event_counter: u32,
-    _generic: std::marker::PhantomData<E>,
+    event_queue: Arc<EventQueue<E>>,
+    event_manager: EventManager,
 }
 
 impl<E: Event> EventReader<E> {
-    pub fn new(events: &Events) -> Self {
-        let last_event_counter = events
+    pub fn new(event_manager: &EventManager) -> Self {
+        let last_event_counter = event_manager
             .get_event_queue::<E>()
             .unwrap_or_else(|| panic!("get_event_queue() failed, {} not found", std::any::type_name::<E>()))
+            .load()
             .event_count;
+        let event_queue = event_manager.get_event_queue::<E>().unwrap().load_full();
 
         Self {
             last_event_counter,
-            _generic: std::marker::PhantomData
+            event_queue,
+            event_manager: event_manager.clone(),
         }
     }
 
-    pub fn read<'a>(&'a mut self, events: &'a Events) -> EventIterator<'a, E> {
-        let event_queue = events.get_event_queue::<E>().unwrap();
-        EventIterator::new(event_queue, &mut self.last_event_counter)
+    #[inline]
+    pub fn read(&mut self) -> EventIterator<E> {
+        self.event_queue = self.event_manager.get_event_queue::<E>().unwrap().load_full();
+        EventIterator::new(&self.event_queue, &mut self.last_event_counter)
     }
 }
 
@@ -93,54 +100,66 @@ impl<'a, E: Event> Iterator for EventIterator<'a, E> {
     }
 }
 
-type EventUpdateFunction = Box<dyn FnMut(&mut TypeMap)>;
+type EventUpdateFunction = Box<dyn Fn(&TypeMap) + Send + Sync>;
+type EventsItem<E> = ArcSwap<EventQueue<E>>;
 
-pub struct Events {
+#[derive(Clone)]
+pub struct EventManager(Arc<EventManagerBuilder>);
+
+impl EventManager {
+    #[inline]
+    pub fn get_event_queue<E: Event>(&self) -> Option<&EventsItem<E>> {
+        self.0.get_event_queue()
+    }
+
+    #[inline]
+    pub fn send<E: Event>(&self, event: E) {
+        let mut event_queue: EventQueue<E> = self.get_event_queue::<E>().unwrap().load().as_ref().clone();
+        event_queue.send(event);
+        self.get_event_queue::<E>().unwrap().store(Arc::new(event_queue));
+    }
+
+    pub fn update(&self) {
+        for update in self.0.event_queue_updates.iter() {
+            update(&self.0.events);
+        }
+    }
+
+    pub fn create_reader<E: Event>(&self) -> EventReader<E> {
+        EventReader::new(self)
+    }
+}
+
+#[derive(Default)]
+pub struct EventManagerBuilder {
     events: TypeMap,
     event_queue_updates: Vec<EventUpdateFunction>,
 }
 
-impl Events {
-    pub fn new() -> Self {
-        Self { events: TypeMap::new(), event_queue_updates: vec![] }
-    }
-
+impl EventManagerBuilder {
     #[inline]
-    pub fn get_event_queue<E: Event>(&self) -> Option<&EventQueue<E>> {
-        self.events.get::<EventQueue<E>>()
-    }
-
-    #[inline]
-    pub fn get_mut_event_queue<E: Event>(&mut self) -> Option<&mut EventQueue<E>> {
-        self.events.get_mut::<EventQueue<E>>()
+    pub fn get_event_queue<E: Event>(&self) -> Option<&EventsItem<E>> {
+        self.events.get::<EventsItem<E>>()
     }
 
     #[inline]
     fn insert_new_event_queue<E: Event>(&mut self) {
-        self.events.insert::<EventQueue<E>>(EventQueue::new());
+        self.events.insert::<EventsItem<E>>(ArcSwap::from(Arc::new(EventQueue::new())));
     }
 
-    #[inline]
-    pub fn register_event_type<E: Event>(&mut self) {
-        fn update_event_queue<E: Event>(events: &mut TypeMap) {
-            let event_queue = events.get_mut::<EventQueue<E>>().unwrap();
+    pub fn register_event_type<E: Event>(mut self) -> Self {
+        fn update_event_queue<E: Event>(events: &TypeMap) {
+            let mut event_queue: EventQueue<E> = events.get::<EventsItem<E>>().unwrap().load().as_ref().clone();
             event_queue.update();
+            events.get::<EventsItem<E>>().unwrap().store(Arc::new(event_queue));
         }
-        if self.get_event_queue::<E>().is_some() { return; }
+        if self.get_event_queue::<E>().is_some() { return self; }
         self.insert_new_event_queue::<E>();
-        self.event_queue_updates.push(Box::new(|events| { update_event_queue::<E>(events) }))
+        self.event_queue_updates.push(Box::new(|events| { update_event_queue::<E>(events) }));
+        self
     }
 
-    #[inline]
-    pub fn send<E: Event>(&mut self, event: E) {
-        let event_queue = self.get_mut_event_queue().unwrap_or_else(|| panic!("get_mut_event_queue() failed, {} not found", std::any::type_name::<E>()));
-        event_queue.send(event);
+    pub fn build(self) -> EventManager {
+        EventManager(Arc::new(self))
     }
-
-    pub fn update(&mut self) {
-        for update in self.event_queue_updates.iter_mut() {
-            update(&mut self.events);
-        }
-    }
-
 }

@@ -155,22 +155,23 @@ impl Game {
         let settings_path = settings_path.into();
         let (mut game, event_loop) = pollster::block_on(Self::new(&settings_path))?;
         
-        let mut layers = LayerStack::new();
+        let mut layers = LayerStack::new(|f| {
+            f.register_event_type::<GameWindowEvent>()
+            .register_event_type::<ChunkUpdateRenderMesh>()
+            .register_event_type::<KeyboardInputEvent>()
+            .register_event_type::<MouseInputEvent>()
+            .register_event_type::<MouseMoveEvent>()
+            .register_event_type::<Event<()>>()
+        });
 
-        layers.register_event_type::<GameWindowEvent>();
-        layers.register_event_type::<ChunkUpdateRenderMesh>();
-        layers.register_event_type::<KeyboardInputEvent>();
-        layers.register_event_type::<MouseInputEvent>();
-        layers.register_event_type::<MouseMoveEvent>();
-        layers.register_event_type::<Event<()>>();
 
-        layers.push_layer(Box::new(GameWindowLayer::new(&layers.events)));
-        layers.push_layer(Box::new(GameLogicLayer::new(&game.device, &game.queue, &game.surface_config, &layers.events, &game.settings).unwrap()));
-        layers.push_layer(Box::new(ChunkRenderingLayer::new(&layers.events)));
+        layers.push_layer(Box::new(GameWindowLayer::new(&layers.event_manager)));
+        layers.push_layer(Box::new(GameLogicLayer::new(&game.device, &game.queue, &game.surface_config, &layers.event_manager, &game.settings).unwrap()));
+        layers.push_layer(Box::new(ChunkRenderingLayer::new(&layers.event_manager)));
 
         event_loop.run(move |event, elwt| {
             elwt.set_control_flow(winit::event_loop::ControlFlow::Poll);
-            layers.events.send(event);
+            layers.event_manager.send(event);
             layers.update(&mut game);
             if game.quit {
                 elwt.exit();

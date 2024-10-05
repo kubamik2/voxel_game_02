@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use cgmath::{Vector2, Vector3};
 
-use crate::{camera::Camera, event::{EventReader, Events}, game::Game, game_window::{KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, global_vector::GlobalVecU, gui::DebugGui, interval::Interval, layer::Layer, settings::Settings, world::{region::Region, chunk::{chunk_part::CHUNK_SIZE_I32, chunks3x3::Chunks3x3, dynamic_chunk_mesh::DynamicChunkMesh}, World, PARTS_PER_CHUNK}, BLOCK_MAP};
+use crate::{camera::Camera, event::{EventReader, EventManager}, game::Game, game_window::{KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}, global_vector::GlobalVecU, gui::DebugGui, interval::Interval, layer::Layer, settings::Settings, world::{region::Region, chunk::{chunk_part::CHUNK_SIZE_I32, chunks3x3::Chunks3x3, dynamic_chunk_mesh::DynamicChunkMesh}, World, PARTS_PER_CHUNK}, BLOCK_MAP};
 
 pub struct GameLogicLayer {
     world: World,
@@ -15,10 +15,11 @@ pub struct GameLogicLayer {
 }
 
 impl Layer for GameLogicLayer {
-    fn on_update(&mut self, events: &mut Events, game: &mut Game) {
+    fn on_update(&mut self, event_manager: &mut EventManager, game: &mut Game) {
         self.interval_300hz.tick(|| {
             self.world.chunk_manager.update(&game.device);
         });
+        
 
         self.interval_20hz.tick(|| {
             let now = std::time::Instant::now();
@@ -89,21 +90,21 @@ impl Layer for GameLogicLayer {
             game.last_update_time = now.elapsed();
         });
 
-        for event in self.keyboard_input_reader.read(events) {
+        for event in self.keyboard_input_reader.read() {
             self.world.player.handle_keyboard_input(event.key_code, event.pressed);
         }
 
-        for event in self.mouse_input_reader.read(events) {
+        for event in self.mouse_input_reader.read() {
             self.world.player.handle_mouse_input(event.button, event.pressed);
             self.world.player.modify_block(&mut self.world.chunk_manager, BLOCK_MAP.get("torch").unwrap().clone().into());
         }
 
-        for event in self.mouse_move_reader.read(events) {
+        for event in self.mouse_move_reader.read() {
             self.world.player.handle_mouse_movement(event.delta.map(|f| f as f32));
         }
     }
 
-    fn on_render(&mut self, events: &mut Events, game: &mut Game) {
+    fn on_render(&mut self, events: &mut EventManager, game: &mut Game) {
         let dt = game.last_render_instant.elapsed();
         self.world.player.update(dt.as_secs_f32());
         let debug_gui = DebugGui::new(&self.world, dt, game.last_update_time);
@@ -114,15 +115,15 @@ impl Layer for GameLogicLayer {
 }
 
 impl GameLogicLayer {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, surface_config: &wgpu::SurfaceConfiguration, events: &Events, settings: &Settings) -> anyhow::Result<Self> {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, surface_config: &wgpu::SurfaceConfiguration, event_manager: &EventManager, settings: &Settings) -> anyhow::Result<Self> {
         Ok(Self {
             world: World::new(device, queue, surface_config, settings)?,
             interval_300hz: Interval::new_hz(300.0),
             interval_60hz: Interval::new_hz(60.0),
             interval_20hz: Interval::new_hz(20.0),
-            keyboard_input_reader: EventReader::new(events),
-            mouse_input_reader: EventReader::new(events),
-            mouse_move_reader: EventReader::new(events),
+            keyboard_input_reader: event_manager.create_reader(),
+            mouse_input_reader: event_manager.create_reader(),
+            mouse_move_reader: event_manager.create_reader(),
         })
     }
 }

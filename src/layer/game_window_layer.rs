@@ -1,6 +1,6 @@
 use winit::{event::{DeviceEvent, WindowEvent}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::{event::{EventReader, Events}, game_window::{GameWindowEvent, KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}};
+use crate::{event::{EventReader, EventManager}, game_window::{GameWindowEvent, KeyboardInputEvent, MouseInputEvent, MouseMoveEvent}};
 
 use super::Layer;
 
@@ -9,12 +9,12 @@ pub struct GameWindowLayer {
 }
 
 impl Layer for GameWindowLayer {
-    fn on_update(&mut self, events: &mut crate::event::Events, game: &mut crate::game::Game) {
+    fn on_update(&mut self, events: &mut crate::event::EventManager, game: &mut crate::game::Game) {
         if game.render_thread.is_work_done() {
             game.game_window.window().request_redraw();
         }
 
-        for event in self.winit_event_reader.read(events).cloned().collect::<Vec<winit::event::Event<()>>>() {
+        for event in self.winit_event_reader.read().cloned().collect::<Vec<winit::event::Event<()>>>() {
             match event {
                 winit::event::Event::WindowEvent { event, .. } => {
                     let _ = game.egui_winit_state.on_window_event(game.game_window.window(), &event);
@@ -65,7 +65,7 @@ impl Layer for GameWindowLayer {
 
     }
 
-    fn on_render(&mut self, events: &mut Events, game: &mut crate::game::Game) {
+    fn on_render(&mut self, events: &mut EventManager, game: &mut crate::game::Game) {
         game.game_window.window().set_cursor_visible(false);
         game.egui_winit_state.handle_platform_output(game.game_window.window(), game.egui_full_output.platform_output.clone());
         let raw_input = game.egui_winit_state.take_egui_input(game.game_window.window());
@@ -74,7 +74,7 @@ impl Layer for GameWindowLayer {
 }
 
 impl GameWindowLayer {
-    pub fn new(events: &Events) -> Self {
+    pub fn new(events: &EventManager) -> Self {
         Self {
             winit_event_reader: EventReader::new(events),
         }

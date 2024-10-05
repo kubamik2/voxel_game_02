@@ -1,6 +1,10 @@
 #![feature(variant_count, float_next_up_down, downcast_unchecked, new_zeroed_alloc, portable_simd, trait_alias, mapped_lock_guards)]
+use std::ops::Deref;
+
 use block::{asset_loader::{BlockList, BlockMap}, model::{block_model_variant::BlockModelVariants, QuadRaw}, Block, BlockId};
 use cgmath::Vector3;
+use event::{EventManager, EventManagerBuilder};
+use global_resources::{GlobalResources, GlobalResourcesBuilder};
 use hashbrown::HashMap;
 use game::Game;
 use world::structure::Structure;
@@ -25,6 +29,7 @@ mod keybinds;
 mod utils;
 mod shader;
 mod chunk_position;
+mod global_resources;
 
 lazy_static::lazy_static! {
     pub static ref BASE_MODELS: block::asset_loader::BaseCuboidBlockModels = block::asset_loader::load_models("./assets/models").unwrap();
@@ -71,6 +76,15 @@ lazy_static::lazy_static! {
         structures
     };
 }
+
+pub static GLOBAL_RESOURCES: std::sync::LazyLock<GlobalResources> = std::sync::LazyLock::new(|| 
+    GlobalResourcesBuilder::default()
+        .register_resource(
+            EventManagerBuilder::default()
+                .build()
+        )
+        .build()
+);
 
 fn main() -> anyhow::Result<()> {
     Game::run("./settings.json")

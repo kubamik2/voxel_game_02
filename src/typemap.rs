@@ -2,8 +2,9 @@ use std::any::{Any, TypeId};
 
 use hashbrown::HashMap;
 
+#[derive(Default)]
 pub struct TypeMap {
-    inner: HashMap<TypeId, Box<dyn Any>>
+    inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>
 }
 
 impl TypeMap where {
@@ -23,7 +24,7 @@ impl TypeMap where {
     }
 
     #[inline]
-    pub fn insert<K: 'static>(&mut self, value: K) {
+    pub fn insert<K: 'static + Send + Sync>(&mut self, value: K) {
         self.inner.insert(TypeId::of::<K>(), Box::new(value));
     }
 }

@@ -1,4 +1,5 @@
 use arc_swap::{access::{Access, DynAccess}, ArcSwap};
+use egui::mutex::Mutex;
 
 use crate::typemap::TypeMap;
 use std::sync::{mpsc::{channel, Sender, Receiver}, Arc};
@@ -29,6 +30,12 @@ impl<E: Event> EventQueue<E> {
     pub fn send(&mut self, event: E) {
         self.queue_new.push(event);
         self.event_count += 1;
+    }
+
+    pub fn send_batch<I: IntoIterator<Item = E>>(&mut self, events: I) {
+        let queue_len_old = self.queue_new.len();
+        self.queue_new.extend(events);
+        self.event_count += (self.queue_new.len() - queue_len_old) as u32;
     }
 
     pub fn update(&mut self) {
@@ -101,6 +108,7 @@ impl<'a, E: Event> Iterator for EventIterator<'a, E> {
 }
 
 type EventUpdateFunction = Box<dyn Fn(&TypeMap) + Send + Sync>;
+type QueuedEventWritesUpdateFunction = Box<dyn Fn(&TypeMap, &TypeMap) + Send + Sync>;
 type EventsItem<E> = ArcSwap<EventQueue<E>>;
 
 #[derive(Clone)]
@@ -114,14 +122,26 @@ impl EventManager {
 
     #[inline]
     pub fn send<E: Event>(&self, event: E) {
-        let mut event_queue: EventQueue<E> = self.get_event_queue::<E>().unwrap().load().as_ref().clone();
-        event_queue.send(event);
-        self.get_event_queue::<E>().unwrap().store(Arc::new(event_queue));
+        // self.get_event_queue::<E>().unwrap().rcu(move |event_queue| {
+        //     let mut event_queue = Arc::clone(event_queue);
+        //     let event_queue_mut = Arc::make_mut(&mut event_queue);
+        //     event_queue_mut.send(event.clone());
+        //     event_queue
+        // });
+
+        let mut queued_event_writes = self.0.get_queued_event_writes::<E>().unwrap().lock();
+        queued_event_writes.push(event);
     }
 
     pub fn update(&self) {
         for update in self.0.event_queue_updates.iter() {
             update(&self.0.events);
+        }
+    }
+
+    pub fn write_queued_events(&self) {
+        for update in self.0.queued_event_writes_updates.iter() {
+            update(&self.0.events, &self.0.queued_event_writes);
         }
     }
 
@@ -134,6 +154,8 @@ impl EventManager {
 pub struct EventManagerBuilder {
     events: TypeMap,
     event_queue_updates: Vec<EventUpdateFunction>,
+    queued_event_writes: TypeMap,
+    queued_event_writes_updates: Vec<QueuedEventWritesUpdateFunction>,
 }
 
 impl EventManagerBuilder {
@@ -142,20 +164,49 @@ impl EventManagerBuilder {
         self.events.get::<EventsItem<E>>()
     }
 
+    fn get_queued_event_writes<E: Event>(&self) -> Option<&Arc<Mutex<Vec<E>>>> {
+        self.queued_event_writes.get::<Arc<Mutex<Vec<E>>>>()
+    }
+
     #[inline]
     fn insert_new_event_queue<E: Event>(&mut self) {
         self.events.insert::<EventsItem<E>>(ArcSwap::from(Arc::new(EventQueue::new())));
     }
 
+    fn insert_new_queued_event_writes<E: Event>(&mut self) {
+        self.queued_event_writes.insert(Arc::new(Mutex::new(Vec::<E>::new())));
+    }
+
     pub fn register_event_type<E: Event>(mut self) -> Self {
         fn update_event_queue<E: Event>(events: &TypeMap) {
-            let mut event_queue: EventQueue<E> = events.get::<EventsItem<E>>().unwrap().load().as_ref().clone();
-            event_queue.update();
-            events.get::<EventsItem<E>>().unwrap().store(Arc::new(event_queue));
+            events.get::<EventsItem<E>>().unwrap().rcu(|event_queue| {
+                let mut event_queue = Arc::clone(event_queue);
+                let event_queue_mut = Arc::make_mut(&mut event_queue);
+                event_queue_mut.update();
+                event_queue
+            });
         }
+
+        fn update_queued_event_writes<E: Event>(events: &TypeMap, queued_event_writes: &TypeMap) {
+            events.get::<EventsItem<E>>().unwrap().rcu(|event_queue| {
+                let mut event_queue = Arc::clone(event_queue);
+                let event_queue_mut = Arc::make_mut(&mut event_queue);
+                let mut queued_event_writes_guard = queued_event_writes.get::<Arc<Mutex<Vec<E>>>>().unwrap().lock();
+
+                let mut queued_events = vec![];
+                std::mem::swap(&mut queued_events, queued_event_writes_guard.as_mut());
+
+                event_queue_mut.send_batch(queued_events);
+
+                event_queue
+            });
+        }
+        
         if self.get_event_queue::<E>().is_some() { return self; }
         self.insert_new_event_queue::<E>();
+        self.insert_new_queued_event_writes::<E>();
         self.event_queue_updates.push(Box::new(|events| { update_event_queue::<E>(events) }));
+        self.queued_event_writes_updates.push(Box::new(|events, queued_event_writes| { update_queued_event_writes::<E>(events, queued_event_writes ) }));
         self
     }
 

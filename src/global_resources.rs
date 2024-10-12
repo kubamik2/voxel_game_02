@@ -19,6 +19,10 @@ impl GlobalResourcesBuilder {
         self
     }
 
+    // pub fn register_resource_type<R: GlobalResource>(mut self) -> Self {
+    //     self
+    // }
+
     pub fn build(self) -> GlobalResources {
         GlobalResources(Arc::new(self.0))
     }

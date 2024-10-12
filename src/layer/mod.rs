@@ -49,6 +49,7 @@ impl LayerStack {
             if game.is_render_frame {
                 layer.on_render(event_manager, game);
             }
+            event_manager.write_queued_events();
         }
 
         for overlay in self.overlays.iter_mut() {
@@ -56,6 +57,7 @@ impl LayerStack {
             if game.is_render_frame {
                 overlay.on_render(event_manager, game);
             }
+            event_manager.write_queued_events();
         }
 
         event_manager.update();

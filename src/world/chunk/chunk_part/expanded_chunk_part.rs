@@ -1,6 +1,6 @@
 use cgmath::{Vector2, Vector3};
 
-use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::LightLevel, Block}, world::{chunk::{chunk_map::ChunkMap, chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE_U32}}, PARTS_PER_CHUNK}};
+use crate::{block::{block_pallet::{BlockPallet, BlockPalletItemId}, light::LightLevel, Block}, world::{chunk::{chunk_map::{ChunkMapLock, ChunkMap}, chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE_U32}}, PARTS_PER_CHUNK}};
 
 use super::CHUNK_SIZE;
 
@@ -73,8 +73,8 @@ impl ExpandedChunkPart {
 
     pub fn new(chunk_map: &ChunkMap, chunk_pos: Vector2<i32>, chunk_part_index: usize) -> Option<Self> {
         // let now = std::time::Instant::now();
-        let Some(chunk) = chunk_map.get_chunk(chunk_pos) else { return None; };
-        let Some(chunk_part) = chunk.parts.get(chunk_part_index) else { return None; };
+        let chunk = chunk_map.get_chunk(&chunk_pos)?;
+        let chunk_part = chunk.parts.get(chunk_part_index)?;
 
         let mut expanded_chunk_part = Self {
             block_pallet_ids: std::array::from_fn(|_| 0),
@@ -103,7 +103,7 @@ impl ExpandedChunkPart {
         
 
         // +x
-        if let Some(chunk) = chunk_map.get_chunk(Vector2::new(chunk_pos.x + 1, chunk_pos.y)) {
+        if let Some(chunk) = chunk_map.get_chunk(&(Vector2::new(chunk_pos.x + 1, chunk_pos.y))) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE_U32 {
@@ -137,7 +137,7 @@ impl ExpandedChunkPart {
         }
 
         // -x
-        if let Some(chunk) = chunk_map.get_chunk(Vector2::new(chunk_pos.x - 1, chunk_pos.y)) {
+        if let Some(chunk) = chunk_map.get_chunk(&(Vector2::new(chunk_pos.x - 1, chunk_pos.y))) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE_U32 {
@@ -171,7 +171,7 @@ impl ExpandedChunkPart {
         }
 
         // +z
-        if let Some(chunk) = chunk_map.get_chunk(Vector2::new(chunk_pos.x, chunk_pos.y + 1)) {
+        if let Some(chunk) = chunk_map.get_chunk(&(Vector2::new(chunk_pos.x, chunk_pos.y + 1))) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE_U32 {
@@ -205,7 +205,7 @@ impl ExpandedChunkPart {
         }
 
         // -z
-        if let Some(chunk) = chunk_map.get_chunk(Vector2::new(chunk_pos.x, chunk_pos.y - 1)) {
+        if let Some(chunk) = chunk_map.get_chunk(&(Vector2::new(chunk_pos.x, chunk_pos.y - 1))) {
             let chunk_part = &chunk.parts[chunk_part_index];
 
             for y in 0..CHUNK_SIZE_U32 {
@@ -265,7 +265,7 @@ impl ExpandedChunkPart {
         }
 
         // corner +x +z
-        if let Some(chunk) = chunk_map.get_chunk(chunk_pos.map(|f| f + 1)) {
+        if let Some(chunk) = chunk_map.get_chunk(&(chunk_pos.map(|f| f + 1))) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE_U32 {
                 let position = unsafe { ChunkPartPosition::new_unchecked(Vector3 { x: 0, y: y, z: 0 }) };
@@ -292,7 +292,7 @@ impl ExpandedChunkPart {
         }
 
         // corner -x +z
-        if let Some(chunk) = chunk_map.get_chunk(Vector2::new(chunk_pos.x - 1, chunk_pos.y + 1)) {
+        if let Some(chunk) = chunk_map.get_chunk(&(Vector2::new(chunk_pos.x - 1, chunk_pos.y + 1))) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE_U32 {
                 let position = unsafe { ChunkPartPosition::new_unchecked(Vector3 { x: CHUNK_SIZE_U32 - 1, y: y, z: 0 }) };
@@ -319,7 +319,7 @@ impl ExpandedChunkPart {
         }
 
         // corner +x -z
-        if let Some(chunk) = chunk_map.get_chunk(Vector2::new(chunk_pos.x + 1, chunk_pos.y - 1)) {
+        if let Some(chunk) = chunk_map.get_chunk(&(Vector2::new(chunk_pos.x + 1, chunk_pos.y - 1))) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE_U32 {
                 let position = unsafe { ChunkPartPosition::new_unchecked(Vector3 { x: 0, y: y, z: CHUNK_SIZE_U32 - 1 }) };
@@ -346,7 +346,7 @@ impl ExpandedChunkPart {
         }
 
         // corner -x -z
-        if let Some(chunk) = chunk_map.get_chunk(chunk_pos.map(|f| f - 1)) {
+        if let Some(chunk) = chunk_map.get_chunk(&(chunk_pos.map(|f| f - 1))) {
             let chunk_part = &chunk.parts[chunk_part_index];
             for y in 0..CHUNK_SIZE_U32 {
                 let position = unsafe { ChunkPartPosition::new_unchecked(Vector3 { x: CHUNK_SIZE_U32 - 1, y: y, z: CHUNK_SIZE_U32 - 1 }) };

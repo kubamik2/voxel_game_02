@@ -5,7 +5,7 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::{block::{light::{LightLevel, LIGHT_LEVEL_MAX_VALUE}, Block, FaceDirection}, chunk_position::ChunkPosition, global_vector::GlobalVecU, world::{chunk::chunk_part::CHUNK_SIZE_I32, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_LIST};
 
-use super::{chunk_map::ChunkMap, chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32}, Chunk};
+use super::{chunk_map::{ChunkMapLock, ChunkMap}, chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32}, Chunk};
 
 pub struct Chunks3x3 {
     pub chunks: Box<[Chunk; 9]>,
@@ -147,7 +147,7 @@ impl Chunks3x3 {
     pub fn new(chunk_map: &mut ChunkMap, center_chunk_position: Vector2<i32>) -> Option<Self> {
         for z in -1..=1 {
             for x in -1..=1 {
-                if !chunk_map.contains_key(center_chunk_position + Vector2::new(x, z)) { return None; }
+                if !chunk_map.contains_position(&(center_chunk_position + Vector2::new(x, z))) { return None; }
             }
         }
         
@@ -155,7 +155,7 @@ impl Chunks3x3 {
         let mut index = 0;
         for z in -1..=1 {
             for x in -1..=1 {
-                chunks[index] = MaybeUninit::new(Arc::into_inner(chunk_map.remove(center_chunk_position + Vector2::new(x, z)).unwrap()).unwrap());
+                chunks[index] = MaybeUninit::new(Arc::into_inner(chunk_map.remove(&(center_chunk_position + Vector2::new(x, z))).unwrap()).unwrap());
                 index += 1;
             }
         }
@@ -170,10 +170,11 @@ impl Chunks3x3 {
         Some(Self { chunks })
     }
 
-    pub fn return_to_chunk_map(self, chunk_map: &mut ChunkMap) {
+    pub fn return_to_chunk_map(self, chunk_map: &mut ChunkMapLock) {
+        let mut chunk_map = chunk_map.write();
         for mut chunk in self.chunks.into_iter() {
             chunk.maintain_parts();
-            chunk_map.insert(chunk.position, chunk);
+            chunk_map.insert(chunk);
         }
     }
 

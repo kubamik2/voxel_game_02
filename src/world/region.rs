@@ -2,20 +2,20 @@ use std::{io::{Read, Seek, Write}, os::linux::fs::MetadataExt};
 
 use cgmath::Vector2;
 
-use super::chunk::chunk_map::ChunkMap;
+use super::chunk::chunk_map::ChunkMapLock;
 use hashbrown::HashMap;
 
 pub const REGION_SIZE: usize = 16; // width and height of chunks in a region
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct Region {
-    pub chunks: ChunkMap,
+    pub chunks: ChunkMapLock,
     pub position: Vector2<i32>,
 }
 
 impl Region {
     pub fn new(position: Vector2<i32>) -> Self {
         Self {
-            chunks: ChunkMap::new(),
+            chunks: ChunkMapLock::default(),
             position,
         }
     }
@@ -44,12 +44,12 @@ impl Region {
         format!("{}_{}", position.x, position.y)
     }
 
-    pub fn are_all_chunks_unloaded(&self) -> bool {
-        for chunk in self.chunks.values() {
+    // pub fn are_all_chunks_unloaded(&self) -> bool {
+    //     for chunk in self.chunks.values() {
 
-        }
-        true
-    }
+    //     }
+    //     true
+    // }
 }
 
 pub struct Regions(HashMap<Vector2<i32>, Region>);

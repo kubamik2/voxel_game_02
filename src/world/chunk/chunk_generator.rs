@@ -5,7 +5,7 @@ use hashbrown::HashSet;
 
 use crate::{block::Block, chunk_position::ChunkPosition, thread_work_dispatcher::ThreadWorkDispatcher, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP, STRUCTURES};
 
-use super::{chunk_map::ChunkMap, chunk_part::{chunk_part_position::ChunkPartPosition, CHUNK_SIZE, CHUNK_SIZE_U32}, chunks3x3::Chunks3x3, Chunk};
+use super::{chunk_map::{ChunkMapLock, ChunkMap}, chunk_part::{chunk_part_position::ChunkPartPosition, CHUNK_SIZE, CHUNK_SIZE_U32}, chunks3x3::Chunks3x3, Chunk};
 
 lazy_static::lazy_static! {
     static ref DBG: Arc<Mutex<(usize, std::time::Duration, std::time::Duration, std::time::Duration)>> = Arc::new(Mutex::new((0, std::time::Duration::ZERO, std::time::Duration::ZERO, std::time::Duration::MAX)));
@@ -61,7 +61,7 @@ impl ChunkGenerator {
 
         #[inline]
         fn create_input_chunk(chunk_map: &mut ChunkMap, chunk_position: Vector2<i32>, scheduled_generations: &mut HashSet<Vector2<i32>>) -> Option<ChunkGeneratorInput> {
-            let Some(chunk) = chunk_map.remove(chunk_position) else { return None; };
+            let Some(chunk) = chunk_map.remove(&chunk_position) else { return None; };
             scheduled_generations.insert(chunk_position);
             Some(ChunkGeneratorInput::Chunk(chunk))
         }

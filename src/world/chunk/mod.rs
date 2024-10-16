@@ -18,8 +18,24 @@ pub mod chunk_generator;
 pub mod chunks3x3;
 pub mod chunk_renderer;
 
+#[derive(Default)]
+pub struct ChunkModificationCounter(std::sync::atomic::AtomicU64);
+
+impl ChunkModificationCounter {
+    pub fn increment(&self) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn load(&self) -> u64 {
+        self.0.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+pub static CHUNK_MODIFICATION_COUNTER: ChunkModificationCounter = ChunkModificationCounter(std::sync::atomic::AtomicU64::new(0));
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Chunk {
+    pub last_update: u64,
     pub position: Vector2<i32>,
     pub parts: [ChunkPart; PARTS_PER_CHUNK],
     pub generation_stage: GenerationStage,
@@ -79,6 +95,7 @@ impl Debug for Chunk {
 impl Chunk {
     pub fn new_air(chunk_position: Vector2<i32>) -> Self {
         Self {
+            last_update: CHUNK_MODIFICATION_COUNTER.load(),
             position: chunk_position,
             parts: std::array::from_fn(|_| ChunkPart::new_air()),
             generation_stage: GenerationStage::Empty,

@@ -31,5 +31,5 @@ egui-winit = "0.28.1"
 lyon_tessellation = "1.0.15"
 rmp-serde = "1.3.0"
 serde-big-array = "0.5.1"
-parking_lot = "0.12.3"
+parking_lot = { version = "0.12.3", features = ["serde"] }
 arc-swap = "1.7.1"

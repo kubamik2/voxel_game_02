@@ -154,10 +154,12 @@ impl Player {
         let mut collision_pos = None;
         
         for voxel_pos in self.position.interpolate_voxels(self.direction, 5.0) {
-            let Some(block) = chunk_manager.chunk_map.get_block(voxel_pos) else { continue; };
-            let block_info = BLOCK_LIST.get(block.id()).unwrap();
+            let chunk_map = chunk_manager.chunk_map_lock.read();
+            let Some(block) = chunk_map.get_block(voxel_pos) else { continue; };
+            // let block_info = BLOCK_LIST.get(block.id()).unwrap();
             if !block.properties().targetable { continue; }
             let Some(variants) = BLOCK_MODEL_VARIANTS.get_model_variants(block) else { continue; };
+            drop(chunk_map);
 
             let ray = Ray::new(self.position, self.direction, 5.0);
             let mut nearest_collision = None;
@@ -194,15 +196,16 @@ impl Player {
 
         let air = BLOCK_MAP.get("air").unwrap().clone().into();
         if self.is_left_mouse_pressed {
-            chunk_manager.chunk_map.set_block(voxel_pos, air);
+            chunk_manager.chunk_map_lock.write().set_block(voxel_pos, air);
         } else if self.is_right_mouse_pressed {
             voxel_pos += face.normal_i32();
+            let mut chunk_map = chunk_manager.chunk_map_lock.write();
             {
-                let Some(block) = chunk_manager.chunk_map.get_block(voxel_pos) else { return; };
+                let Some(block) = chunk_map.get_block(voxel_pos) else { return; };
                 if !block.properties().replaceable { return; }
             }
 
-            chunk_manager.chunk_map.set_block(voxel_pos, block);
+            chunk_map.set_block(voxel_pos, block);
         } else {
             return;
         }

@@ -29,12 +29,12 @@ impl Layer for GameLogicLayer {
                 let mut inner_chunk_position = changed_block_position.local().map(|f| f as i32);
                 inner_chunk_position.y += changed_block_position.chunk.y * CHUNK_SIZE_I32;
 
-                let Some(mut chunks3x3) = Chunks3x3::new(&mut self.world.chunk_manager.chunk_map, changed_block_position.chunk.xz()) else { continue; };
+                let Some(mut chunks3x3) = Chunks3x3::new(&mut self.world.chunk_manager.chunk_map_lock.write(), changed_block_position.chunk.xz()) else { continue; };
                 chunks3x3.remove_block_light_at(inner_chunk_position);
                 chunks3x3.propagate_block_light_at(inner_chunk_position);
                 chunks3x3.update_sky_light_level_at(inner_chunk_position);
                 
-                chunks3x3.return_to_chunk_map(&mut self.world.chunk_manager.chunk_map);
+                chunks3x3.return_to_chunk_map(&mut self.world.chunk_manager.chunk_map_lock);
 
                 if let Some(direction) = changed_block_position.touching_sides() {
                     if let Some(mesh) = self.world.chunk_manager.chunk_mesh_map.get_mut(changed_block_position.chunk.xz() + Vector2::new(direction.x, 0)) {
@@ -61,24 +61,24 @@ impl Layer for GameLogicLayer {
                 }
             }
 
-            if self.world.player.is_r_pressed {
-                let mut region = Region::new(Vector2::new(0, 0));
+            // if self.world.player.is_r_pressed {
+            //     let mut region = Region::new(Vector2::new(0, 0));
 
-                for z in -8..8 {
-                    for x in -8..8 {
-                        let position = Vector2::new(x, z);
+            //     for z in -8..8 {
+            //         for x in -8..8 {
+            //             let position = Vector2::new(x, z);
 
-                        let mut chunk = self.world.chunk_manager.chunk_map.get_chunk(position).cloned().unwrap();
-                        chunk.maintain_parts();
-                        region.chunks.insert(chunk.position, chunk);
-                    }
-                }
-                region.save("./save/").unwrap();
-                let now = std::time::Instant::now();
-                let region = Region::load("./save/", Vector2::new(0, 0)).unwrap();
-                dbg!(now.elapsed());
-            }
-            for chunk in self.world.chunk_manager.chunk_map.values_mut() {
+            //             let mut chunk = self.world.chunk_manager.chunk_map.get_chunk(position).cloned().unwrap();
+            //             chunk.maintain_parts();
+            //             region.chunks.insert(chunk.position, chunk);
+            //         }
+            //     }
+            //     region.save("./save/").unwrap();
+            //     let now = std::time::Instant::now();
+            //     let region = Region::load("./save/", Vector2::new(0, 0)).unwrap();
+            //     dbg!(now.elapsed());
+            // }
+            for chunk in self.world.chunk_manager.chunk_map_lock.write().iter_mut_chunks() {
                 let Some(mesh) = self.world.chunk_manager.chunk_mesh_map.get_mut(chunk.position) else { continue; };
                 let chunk = Arc::get_mut(chunk).unwrap();
                 for (i, part) in chunk.parts.iter_mut().enumerate() {

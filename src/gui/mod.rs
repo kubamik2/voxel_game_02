@@ -15,7 +15,7 @@ impl DebugGui {
     pub fn new(world: &World, last_frame_time: std::time::Duration, last_update_time: std::time::Duration) -> Self {
         Self {
             position: world.player.position,
-            light_level: world.chunk_manager.chunk_map.get_light_level(world.player.position.into()).unwrap_or(LightLevel::new(0, 0).unwrap()),
+            light_level: world.chunk_manager.chunk_map_lock.read().get_light_level(world.player.position.into()).unwrap_or(LightLevel::new(0, 0).unwrap()),
             last_frame_time,
             last_update_time,
         }

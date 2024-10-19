@@ -56,7 +56,7 @@ impl ChunkManager {
         for z in -(self.render_radius as i32)..=self.render_radius as i32 {
             for x in -(self.render_radius as i32)..=self.render_radius as i32 {
                 let pos = player_chunk_position + Vector2::new(x, z);
-                if chunk_map.contains_position(&pos) || self.chunk_generator.scheduled_generations.read().contains(&pos) { continue; }
+                if chunk_map.contains_position(&pos) { continue; }
                 chunk_map.insert(Chunk::new_air(pos));
             }
         }

@@ -80,7 +80,7 @@ impl Layer for GameLogicLayer {
             // }
             for chunk in self.world.chunk_manager.chunk_map_lock.write().iter_mut_chunks() {
                 let Some(mesh) = self.world.chunk_manager.chunk_mesh_map.get_mut(chunk.position) else { continue; };
-                let chunk = Arc::get_mut(chunk).unwrap();
+                let chunk = chunk.get_mut().unwrap();
                 for (i, part) in chunk.parts.iter_mut().enumerate() {
                     mesh.parts_need_meshing[i] |= part.was_modified;
                     part.was_modified = false;

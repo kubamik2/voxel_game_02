@@ -22,7 +22,8 @@ pub mod chunk_renderer;
 pub struct ChunkModificationCounter(std::sync::atomic::AtomicU64);
 
 impl ChunkModificationCounter {
-    pub fn load(&self) -> u64 {
+    #[inline]
+    pub fn get(&self) -> u64 {
         self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 }
@@ -91,7 +92,7 @@ impl Debug for Chunk {
 impl Chunk {
     pub fn new_air(chunk_position: Vector2<i32>) -> Self {
         Self {
-            last_update: CHUNK_MODIFICATION_COUNTER.load(),
+            last_update: CHUNK_MODIFICATION_COUNTER.get(),
             position: chunk_position,
             parts: std::array::from_fn(|_| ChunkPart::new_air()),
             generation_stage: GenerationStage::Empty,
@@ -227,7 +228,7 @@ impl Chunk {
     }
 
     pub fn update_last_update_counter(&mut self) {
-        self.last_update = CHUNK_MODIFICATION_COUNTER.load();
+        self.last_update = CHUNK_MODIFICATION_COUNTER.get();
     }
 }
 static CHUNK_TRANSLATION_BIND_GROUP_LAYOUT: OnceLock<wgpu::BindGroupLayout> = OnceLock::new();
@@ -300,20 +301,28 @@ impl Drop for ChunkTranslation {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ChunkRef(Arc<Chunk>);
 
 impl ChunkRef {
+    #[inline]
     pub fn new(chunk: Chunk) -> Self {
         Self(Arc::new(chunk))
     }
 
+    #[inline]
     pub fn make_mut(&mut self) -> &mut Chunk {
         let chunk_mut = Arc::make_mut(&mut self.0);
         chunk_mut.update_last_update_counter();
         chunk_mut
     }
 
+    #[inline]
+    pub fn get_mut(&mut self) -> Option<&mut Chunk> {
+        Arc::get_mut(&mut self.0)
+    }
+
+    #[inline]
     pub fn into_inner(self) -> Chunk {
         let mut chunk = self.0.as_ref().clone();
         chunk.update_last_update_counter();
@@ -326,5 +335,11 @@ impl Deref for ChunkRef {
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl AsRef<Chunk> for ChunkRef {
+    fn as_ref(&self) -> &Chunk {
+        self.0.as_ref()
     }
 }

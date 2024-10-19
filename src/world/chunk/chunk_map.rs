@@ -5,33 +5,33 @@ use hashbrown::{hash_map::{Keys, Values, ValuesMut}, HashMap};
 
 use crate::{block::{light::LightLevel, Block}, chunk_position::ChunkPosition, global_vector::GlobalVecU};
 
-use super::{chunk_generator::GenerationStage, Chunk};
+use super::{chunk_generator::GenerationStage, Chunk, ChunkRef};
 use parking_lot::RwLock;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
-pub struct ChunkMap(HashMap<Vector2<i32>, Arc<Chunk>>);
+pub struct ChunkMap(HashMap<Vector2<i32>, ChunkRef>);
 
 impl ChunkMap {
     #[inline]
-    pub fn insert(&mut self, chunk: Chunk) -> Option<Arc<Chunk>> {
-        self.insert_arc(Arc::new(chunk))
+    pub fn insert(&mut self, chunk: Chunk) -> Option<ChunkRef> {
+        self.insert_arc(ChunkRef::new(chunk))
     }
 
     #[inline]
-    pub fn insert_arc(&mut self, chunk_arc: Arc<Chunk>) -> Option<Arc<Chunk>> {
-        self.0.insert(chunk_arc.position, chunk_arc)
+    pub fn insert_arc(&mut self, chunk_ref: ChunkRef) -> Option<ChunkRef> {
+        self.0.insert(chunk_ref.position, chunk_ref)
     }
 
     #[inline]
-    pub fn update_chunk(&mut self, chunk_arc: Arc<Chunk>) {
-        let Some(old_chunk) = self.borrow_chunk(&chunk_arc.position) else { return; };
-        if old_chunk.last_update < chunk_arc.last_update {
-            self.insert_arc(chunk_arc);
+    pub fn update_chunk(&mut self, chunk_ref: ChunkRef) {
+        let Some(old_chunk) = self.borrow_chunk(&chunk_ref.position) else { return; };
+        if old_chunk.last_update < chunk_ref.last_update {
+            self.insert_arc(chunk_ref);
         }
     }
 
     #[inline]
-    pub fn get_chunk(&self, position: &Vector2<i32>) -> Option<Arc<Chunk>> {
+    pub fn get_chunk(&self, position: &Vector2<i32>) -> Option<ChunkRef> {
         self.0.get(position).cloned()
     }
     
@@ -42,7 +42,8 @@ impl ChunkMap {
 
     #[inline]
     pub fn borrow_mut_chunk(&mut self, position: &Vector2<i32>) -> Option<&mut Chunk> {
-        self.0.get_mut(position).map(Arc::make_mut)
+        let chunk_ref = self.0.get_mut(position)?;
+        Some(chunk_ref.make_mut())
     }
 
     #[inline]
@@ -51,22 +52,22 @@ impl ChunkMap {
     }
 
     #[inline]
-    pub fn iter_chunks(&self) -> Values<Vector2<i32>, Arc<Chunk>> {
+    pub fn iter_chunks(&self) -> Values<Vector2<i32>, ChunkRef> {
         self.0.values()
     }
 
     #[inline]
-    pub fn iter_mut_chunks(&mut self) -> ValuesMut<Vector2<i32>, Arc<Chunk>> {
+    pub fn iter_mut_chunks(&mut self) -> ValuesMut<Vector2<i32>, ChunkRef> {
         self.0.values_mut()
     }
 
     #[inline]
-    pub fn positions(&self) -> Keys<Vector2<i32>, Arc<Chunk>> {
+    pub fn positions(&self) -> Keys<Vector2<i32>, ChunkRef> {
         self.0.keys()
     }
 
     #[inline]
-    pub fn remove(&mut self, position: &Vector2<i32>) -> Option<Arc<Chunk>> {
+    pub fn remove(&mut self, position: &Vector2<i32>) -> Option<ChunkRef> {
         self.0.remove(position)
     }
 

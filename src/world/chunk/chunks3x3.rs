@@ -5,7 +5,7 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::{block::{light::{LightLevel, LIGHT_LEVEL_MAX_VALUE}, Block, FaceDirection}, chunk_position::ChunkPosition, global_vector::GlobalVecU, world::{chunk::chunk_part::CHUNK_SIZE_I32, structure::Structure, CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_LIST};
 
-use super::{chunk_map::{ChunkMapLock, ChunkMap}, chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32}, Chunk};
+use super::{chunk_map::{ChunkMap, ChunkMapLock}, chunk_part::{chunk_part_position::ChunkPartPosition, ChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32}, Chunk, ChunkRef};
 
 pub struct Chunks3x3 {
     pub chunks: Box<[Chunk; 9]>,
@@ -55,10 +55,6 @@ impl Chunks3x3 {
         let index = Self::chunk_index(offset)?;
         let chunk = &mut self.chunks[index];
 
-        // assert!(Arc::strong_count(chunk) == 1);
-
-        // let chunk_mut = Arc::make_mut(chunk);
-        // Some(chunk_mut)
         Some(chunk)
     }
 
@@ -144,7 +140,7 @@ impl Chunks3x3 {
         }
     }
 
-    pub fn new(chunk_map: &mut ChunkMap, center_chunk_position: Vector2<i32>) -> Option<Self> {
+    pub fn new(chunk_map: &ChunkMap, center_chunk_position: Vector2<i32>) -> Option<Self> {
         for z in -1..=1 {
             for x in -1..=1 {
                 if !chunk_map.contains_position(&(center_chunk_position + Vector2::new(x, z))) { return None; }
@@ -155,12 +151,14 @@ impl Chunks3x3 {
         let mut index = 0;
         for z in -1..=1 {
             for x in -1..=1 {
-                chunks[index] = MaybeUninit::new(Arc::into_inner(chunk_map.remove(&(center_chunk_position + Vector2::new(x, z))).unwrap()).unwrap());
+                let chunk_offset = Vector2::new(x, z);
+                let chunk = chunk_map.get_chunk(&(center_chunk_position + chunk_offset))?.into_inner();
+                chunks[index] = MaybeUninit::new(chunk);
                 index += 1;
             }
         }
 
-        let mut chunks = unsafe { std::mem::transmute::<_, Box<[Chunk; 9]>>(chunks) };
+        let mut chunks = unsafe { std::mem::transmute::<Box<[MaybeUninit<Chunk>; 9]>, Box<[Chunk; 9]>>(chunks) };
         for chunk in chunks.iter_mut() {
             for part in chunk.parts.iter_mut() {
                 part.light_level_layers.uncompress();
@@ -173,7 +171,7 @@ impl Chunks3x3 {
     pub fn return_to_chunk_map(self, chunk_map: &mut ChunkMap) {
         for mut chunk in self.chunks.into_iter() {
             chunk.maintain_parts();
-            chunk_map.insert(chunk);
+            chunk_map.update_chunk(ChunkRef::new(chunk));
         }
     }
 

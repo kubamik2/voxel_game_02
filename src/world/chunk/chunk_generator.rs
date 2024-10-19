@@ -6,7 +6,7 @@ use hashbrown::HashSet;
 
 use crate::{block::Block, chunk_position::ChunkPosition, thread_work_dispatcher::ThreadWorkDispatcher, world::{CHUNK_HEIGHT, PARTS_PER_CHUNK}, BLOCK_MAP, STRUCTURES};
 
-use super::{chunk_map::{ChunkMap, ChunkMapLock}, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, chunk_part_position::ChunkPartPosition, expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32}, chunks3x3::Chunks3x3, dynamic_chunk_mesh::DynamicChunkMesh, Chunk};
+use super::{chunk_map::{ChunkMap, ChunkMapLock}, chunk_mesh_map::ChunkMeshMap, chunk_part::{chunk_part_mesher::ChunkPartMesher, chunk_part_position::ChunkPartPosition, expanded_chunk_part::ExpandedChunkPart, CHUNK_SIZE, CHUNK_SIZE_U32}, chunks3x3::Chunks3x3, dynamic_chunk_mesh::DynamicChunkMesh, Chunk, ChunkRef};
 
 lazy_static::lazy_static! {
     static ref DBG: Arc<Mutex<(usize, std::time::Duration, std::time::Duration, std::time::Duration)>> = Arc::new(Mutex::new((0, std::time::Duration::ZERO, std::time::Duration::ZERO, std::time::Duration::MAX)));
@@ -14,12 +14,12 @@ lazy_static::lazy_static! {
 
 #[derive(Debug)]
 pub enum ChunkGeneratorInput {
-    Chunk(Arc<Chunk>),
+    Chunk(ChunkRef),
     Chunks3x3(Chunks3x3)
 }
 
 pub enum ChunkGeneratorOutput {
-    Chunk(Arc<Chunk>),
+    Chunk(ChunkRef),
     Chunks3x3(Chunks3x3)
 }
 
@@ -39,7 +39,6 @@ impl GenerationStage {
 
 pub struct ChunkGenerator {
     thread_work_dispatcher: ThreadWorkDispatcher<ChunkGeneratorInput, ChunkGeneratorOutput>,
-    pub scheduled_generations: RwLock<HashSet<Vector2<i32>>>,
     mesher: ChunkPartMesher,
 }
 
@@ -49,35 +48,27 @@ impl ChunkGenerator {
 
         Self {
             thread_work_dispatcher,
-            scheduled_generations: RwLock::new(HashSet::new()),
             mesher: ChunkPartMesher::new(8),
         }
     }
 
-    pub fn generate_chunk_to_next_stage(&self, current_stage: GenerationStage, chunk_map: &mut ChunkMap, chunk_position: Vector2<i32>) {
-        fn create_input_area(chunk_map: &mut ChunkMap, chunk_position: Vector2<i32>, scheduled_generations: &mut HashSet<Vector2<i32>>) -> Option<ChunkGeneratorInput> {
+    pub fn generate_chunk_to_next_stage(&self, current_stage: GenerationStage, chunk_map: &ChunkMap, chunk_position: Vector2<i32>) {
+        fn create_input_area(chunk_map: &ChunkMap, chunk_position: Vector2<i32>) -> Option<ChunkGeneratorInput> {
             let chunks3x3 = Chunks3x3::new(chunk_map, chunk_position)?;
-            for z in -1..=1 {
-                for x in -1..=1 {
-                    scheduled_generations.insert(chunk_position + Vector2::new(x, z));
-                }
-            }
             Some(ChunkGeneratorInput::Chunks3x3(chunks3x3))
         }
 
-        fn create_input_chunk(chunk_map: &mut ChunkMap, chunk_position: Vector2<i32>, scheduled_generations: &mut HashSet<Vector2<i32>>) -> Option<ChunkGeneratorInput> {
-            let chunk = chunk_map.remove(&chunk_position)?;
-            scheduled_generations.insert(chunk_position);
+        fn create_input_chunk(chunk_map: &ChunkMap, chunk_position: Vector2<i32>, ) -> Option<ChunkGeneratorInput> {
+            let chunk = chunk_map.get_chunk(&chunk_position)?;
             Some(ChunkGeneratorInput::Chunk(chunk))
         }
 
-        let mut scheduled_generations = self.scheduled_generations.write();
         let Some(generation_input) = (match current_stage {
-            GenerationStage::Empty => create_input_chunk(chunk_map, chunk_position, &mut scheduled_generations),
-            GenerationStage::Shape => create_input_area(chunk_map, chunk_position, &mut scheduled_generations),
-            GenerationStage::Terrain => create_input_area(chunk_map, chunk_position, &mut scheduled_generations),
-            GenerationStage::Decoration => create_input_area(chunk_map, chunk_position, &mut scheduled_generations),
-            GenerationStage::Light => create_input_area(chunk_map, chunk_position, &mut scheduled_generations),
+            GenerationStage::Empty => create_input_chunk(chunk_map, chunk_position),
+            GenerationStage::Shape => create_input_area(chunk_map, chunk_position),
+            GenerationStage::Terrain => create_input_area(chunk_map, chunk_position),
+            GenerationStage::Decoration => create_input_area(chunk_map, chunk_position),
+            GenerationStage::Light => create_input_area(chunk_map, chunk_position),
         }) else { return; };
 
         self.thread_work_dispatcher.dispatch_work(generation_input).expect("chunk_generator.generate_chunk_to_next_stage thread_work_dispatcher.dispatch_work failed");
@@ -193,7 +184,7 @@ impl ChunkGenerator {
             match generation_input {
                 ChunkGeneratorInput::Chunk(mut chunk) => {
                     {
-                        let chunk = Arc::make_mut(&mut chunk);
+                        let chunk = chunk.make_mut();
                         match chunk.generation_stage {
                             GenerationStage::Empty => Self::shape(chunk),
                             _ => panic!("invalid gen input")
@@ -220,14 +211,9 @@ impl ChunkGenerator {
         for gen_out in self.thread_work_dispatcher.iter_outputs() {
             match gen_out {
                 ChunkGeneratorOutput::Chunk(chunk) => {
-                    self.scheduled_generations.write().remove(&chunk.position);
-                    chunk_map.insert_arc(chunk);
+                    chunk_map.update_chunk(chunk);
                 },
                 ChunkGeneratorOutput::Chunks3x3(chunks3x3) => {
-                    for chunk in chunks3x3.chunks.iter() {
-                        self.scheduled_generations.write().remove(&chunk.position);
-                    }
-
                     chunks3x3.return_to_chunk_map(chunk_map);
                 },
             }

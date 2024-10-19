@@ -170,8 +170,7 @@ impl Chunks3x3 {
         Some(Self { chunks })
     }
 
-    pub fn return_to_chunk_map(self, chunk_map: &mut ChunkMapLock) {
-        let mut chunk_map = chunk_map.write();
+    pub fn return_to_chunk_map(self, chunk_map: &mut ChunkMap) {
         for mut chunk in self.chunks.into_iter() {
             chunk.maintain_parts();
             chunk_map.insert(chunk);

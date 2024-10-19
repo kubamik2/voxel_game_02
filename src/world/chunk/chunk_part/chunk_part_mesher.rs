@@ -115,12 +115,12 @@ impl ChunkPartMesher {
 
 
     #[inline]
-    pub fn collect_meshing_outputs(&mut self) -> Box<[MeshingOutput]> {
+    pub fn collect_meshing_outputs(&self) -> Box<[MeshingOutput]> {
         self.thread_work_dispatcher.collect_outputs()
     }
 
     #[inline]
-    pub fn mesh_chunk_part(&mut self, expanded_chunk_part: ExpandedChunkPart, chunk_position: Vector2<i32>, chunk_part_index: usize) -> Result<(), crate::thread_work_dispatcher::ThreadWorkDispatcherError<MeshingInput>> {
+    pub fn mesh_chunk_part(&self, expanded_chunk_part: ExpandedChunkPart, chunk_position: Vector2<i32>, chunk_part_index: usize) -> Result<(), crate::thread_work_dispatcher::ThreadWorkDispatcherError<MeshingInput>> {
         self.thread_work_dispatcher.dispatch_work(MeshingInput {
             expanded_chunk_part: Box::new(expanded_chunk_part),
             chunk_position,

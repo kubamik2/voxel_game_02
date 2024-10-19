@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::{Index, IndexMut}, sync::OnceLock};
+use std::{fmt::Debug, ops::{Deref, Index, IndexMut}, sync::{Arc, OnceLock}};
 
 use cgmath::{Vector2, Vector3};
 use chunk_generator::GenerationStage;
@@ -22,12 +22,8 @@ pub mod chunk_renderer;
 pub struct ChunkModificationCounter(std::sync::atomic::AtomicU64);
 
 impl ChunkModificationCounter {
-    pub fn increment(&self) {
-        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-
     pub fn load(&self) -> u64 {
-        self.0.load(std::sync::atomic::Ordering::Relaxed)
+        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -229,6 +225,10 @@ impl Chunk {
         self.compress_parts();
         self.clean_up_parts();
     }
+
+    pub fn update_last_update_counter(&mut self) {
+        self.last_update = CHUNK_MODIFICATION_COUNTER.load();
+    }
 }
 static CHUNK_TRANSLATION_BIND_GROUP_LAYOUT: OnceLock<wgpu::BindGroupLayout> = OnceLock::new();
 
@@ -297,5 +297,34 @@ impl ChunkTranslation {
 impl Drop for ChunkTranslation {
     fn drop(&mut self) {
         self.buffer.destroy();
+    }
+}
+
+#[derive(Clone)]
+pub struct ChunkRef(Arc<Chunk>);
+
+impl ChunkRef {
+    pub fn new(chunk: Chunk) -> Self {
+        Self(Arc::new(chunk))
+    }
+
+    pub fn make_mut(&mut self) -> &mut Chunk {
+        let chunk_mut = Arc::make_mut(&mut self.0);
+        chunk_mut.update_last_update_counter();
+        chunk_mut
+    }
+
+    pub fn into_inner(self) -> Chunk {
+        let mut chunk = self.0.as_ref().clone();
+        chunk.update_last_update_counter();
+        chunk
+    }
+}
+
+impl Deref for ChunkRef {
+    type Target = Chunk;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

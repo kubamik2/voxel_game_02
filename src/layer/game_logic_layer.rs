@@ -34,7 +34,7 @@ impl Layer for GameLogicLayer {
                 chunks3x3.propagate_block_light_at(inner_chunk_position);
                 chunks3x3.update_sky_light_level_at(inner_chunk_position);
                 
-                chunks3x3.return_to_chunk_map(&mut self.world.chunk_manager.chunk_map_lock);
+                chunks3x3.return_to_chunk_map(&mut self.world.chunk_manager.chunk_map_lock.write());
 
                 if let Some(direction) = changed_block_position.touching_sides() {
                     if let Some(mesh) = self.world.chunk_manager.chunk_mesh_map.get_mut(changed_block_position.chunk.xz() + Vector2::new(direction.x, 0)) {
